@@ -10,7 +10,7 @@ type Options struct {
 	SkipUnchanged bool // suppress entirely unchanged blocks in the detailed listing
 
 	// OldLanguage/NewLanguage select the whitespace-classification rules for each side
-	// (blank = language-neutral JavaScript-compatible scanner).
+	// (blank = language-neutral scanner; C++ raw strings and Go backticks are atomic).
 	OldLanguage string
 	NewLanguage string
 }

@@ -32,13 +32,17 @@ func scopeKey(parentID string) string {
 	return parentID
 }
 
-// ancestorScopes: offset-stripped scope path from the parent upward; empty for top-level blocks.
+// ancestorScopes ignores namespace containers when building match scopes.
 func ancestorScopes(b *ir.SemanticBlock, byID map[string]*ir.SemanticBlock) []string {
 	var path []string
 	id := b.Parent
 	for id != "" {
-		path = append(path, scopeKey(id))
 		parent := byID[id]
+		if parent != nil && parent.Kind == ir.KindNamespace {
+			id = parent.Parent
+			continue
+		}
+		path = append(path, scopeKey(id))
 		if parent == nil {
 			break
 		}

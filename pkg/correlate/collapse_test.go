@@ -3,6 +3,7 @@
 package correlate
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -11,9 +12,7 @@ import (
 )
 
 func TestNumberAnonymousBlocks_PerSide(t *testing.T) {
-	// Two unchanged arrow functions should get the SAME number on old
-	// and new sides (per-side per-kind counters, source-order sorted),
-	// so they appear as [unchanged] rather than bogus [moved] pairs.
+	// Anonymous arrows use matching per-side ordinals.
 	mkArrow := func(id string, pos uint) *ir.SemanticBlock {
 		return &ir.SemanticBlock{
 			ID:   id,
@@ -46,7 +45,7 @@ func TestNumberAnonymousBlocks_PerSide(t *testing.T) {
 func TestIsCollapsibleChild(t *testing.T) {
 	collapsible := []ir.BlockKind{
 		ir.KindMethod, ir.KindLifecycle, ir.KindFunction,
-		ir.KindArrowFunc, ir.KindObjectMethod, ir.KindJSX,
+		ir.KindArrowFunc, ir.KindObjectMethod, ir.KindJSX, ir.KindLambda,
 	}
 	notCollapsible := []ir.BlockKind{
 		ir.KindConstant, ir.KindVariable, ir.KindImport,
@@ -105,10 +104,7 @@ func TestCollapseMatchedSubBlocks(t *testing.T) {
 }
 
 func TestCollapseMatchedSubBlocks_AddedAndRemoved(t *testing.T) {
-	// The old class (removed) and the new class (added) both collapse their
-	// matched child to the SAME canonical reference — the new side's
-	// identity (function relabel), not the old side's (method relabel) — so
-	// a matched pair never renders as two different reference strings.
+	// Added and removed parents use the new side's canonical child reference.
 	oldSrc := "class BKnob {\nrelabel() {}\nother()\n}"
 	newSrc := "function Knob() {\nfunction relabel() {}\nnewThing()\n}"
 
@@ -163,28 +159,25 @@ func TestCollapseMatchedSubBlocks_AddedAndRemoved(t *testing.T) {
 }
 
 func TestCollapseMatchedSubBlocks_MatchedParent(t *testing.T) {
-	// A MATCHED parent (class→function conversion) must also have its
-	// matched children collapsed into reference comments: the parent diff
-	// shows "// [matched: ...]" instead of re-printing the child's body,
-	// and the child's own pair carries the detail.
+	// Matched converted parents still collapse their matched children.
 	oldSrc := "class BKnob {\n  reposition() {}\n  relabel() {}\n}"
 	newSrc := "function Knob() {\n  function reposition() {}\n  function relabel() {}\n}"
 
 	oldReposition := ir.SemanticBlock{
-		ID:     "method:reposition:14",
+		ID:     "method:reposition:16",
 		Kind:   ir.KindMethod,
 		Name:   "reposition",
 		Parent: "class:BKnob:0",
-		Span:   ir.SourceSpan{StartByte: 14, EndByte: 30},
-		Source: "  reposition() {}\n",
+		Span:   ir.SourceSpan{StartByte: 16, EndByte: 31},
+		Source: "reposition() {}",
 	}
 	oldRelabel := ir.SemanticBlock{
-		ID:     "method:relabel:31",
+		ID:     "method:relabel:34",
 		Kind:   ir.KindMethod,
 		Name:   "relabel",
 		Parent: "class:BKnob:0",
-		Span:   ir.SourceSpan{StartByte: 31, EndByte: 45},
-		Source: "  relabel() {}\n",
+		Span:   ir.SourceSpan{StartByte: 34, EndByte: 46},
+		Source: "relabel() {}",
 	}
 	oldClass := ir.SemanticBlock{
 		ID:     "class:BKnob:0",
@@ -195,20 +188,20 @@ func TestCollapseMatchedSubBlocks_MatchedParent(t *testing.T) {
 	}
 
 	newReposition := ir.SemanticBlock{
-		ID:     "function:reposition:17",
+		ID:     "function:reposition:20",
 		Kind:   ir.KindFunction,
 		Name:   "reposition",
 		Parent: "function:Knob:0",
-		Span:   ir.SourceSpan{StartByte: 17, EndByte: 42},
-		Source: "  function reposition() {}\n",
+		Span:   ir.SourceSpan{StartByte: 20, EndByte: 44},
+		Source: "function reposition() {}",
 	}
 	newRelabel := ir.SemanticBlock{
-		ID:     "function:relabel:43",
+		ID:     "function:relabel:47",
 		Kind:   ir.KindFunction,
 		Name:   "relabel",
 		Parent: "function:Knob:0",
-		Span:   ir.SourceSpan{StartByte: 43, EndByte: 66},
-		Source: "  function relabel() {}\n",
+		Span:   ir.SourceSpan{StartByte: 47, EndByte: 68},
+		Source: "function relabel() {}",
 	}
 	newClass := ir.SemanticBlock{
 		ID:     "function:Knob:0",
@@ -241,15 +234,11 @@ func TestCollapseMatchedSubBlocks_MatchedParent(t *testing.T) {
 }
 
 func TestCollapse_MatchedParentCanonicalRefs(t *testing.T) {
-	// Old and new sides numbered the same arrow pair differently
-	// (arrow_function.03 vs arrow_function.01) with identical bodies.
-	// Collapse must write the NEW side's identity on BOTH sides so the
-	// collapsed parents stay byte-identical — otherwise the unchanged
-	// parent would show a phantom diff line and a <100% header.
+	// Collapsed parents use the new side's anonymous identity on both sides.
 	arrowText := "() => {\n    pending = null;\n  }"
-	oldSrc := "function spin() {\n  x = requestAnimationFrame (" + arrowText + ");\n}"
+	oldSrc := "function spin() {\n  x = requestAnimationFrame (\n    " + arrowText + "\n  );\n}\n"
 	newSrc := oldSrc
-	arrowStart := strings.Index(oldSrc, arrowText)
+	arrowStart := strings.Index(oldSrc, "() => {")
 	if arrowStart < 0 {
 		t.Fatal("arrow text not found in parent source")
 	}
@@ -306,6 +295,45 @@ func TestCollapse_MatchedParentCanonicalRefs(t *testing.T) {
 	}
 	if matching.PairSimilarity(&result.Pairs[0]) != 1.0 {
 		t.Errorf("identical collapsed parents must report 100%% similarity, got %v", matching.PairSimilarity(&result.Pairs[0]))
+	}
+}
+
+// TestCollapse_FoldRequiresOwnLine rejects mid-expression reference folding.
+func TestCollapse_FoldRequiresOwnLine(t *testing.T) {
+	// An arrow nested inside a function call (mid-line) must stay inline.
+	midSrc := "function spin() {\n  x = requestAnimationFrame (() => {\n    pending = null;\n  });\n}\n"
+	arrowText := "() => {\n    pending = null;\n  }"
+	midStart := strings.Index(midSrc, arrowText)
+	arrow := ir.SemanticBlock{
+		ID:     "arrow:a1:" + fmt.Sprint(midStart),
+		Kind:   ir.KindArrowFunc,
+		Name:   "arrow_function.01",
+		Parent: "fn:spin:0",
+		Span:   ir.SourceSpan{StartByte: uint(midStart), EndByte: uint(midStart + len(arrowText))},
+		Source: arrowText,
+	}
+	parent := ir.SemanticBlock{
+		ID:     "fn:spin:0",
+		Kind:   ir.KindFunction,
+		Name:   "spin",
+		Span:   ir.SourceSpan{StartByte: 0, EndByte: uint(len(midSrc))},
+		Source: midSrc,
+	}
+	result := &ir.CorrelationResult{
+		Pairs: []ir.CorrelatedPair{
+			{Old: &parent, New: &parent, Confidence: 1.0},
+			{Old: &arrow, New: &arrow, Confidence: 1.0},
+		},
+	}
+
+	CollapseMatchedSubBlocks(result)
+
+	collapsed := result.Pairs[0].Old.Source
+	if strings.Contains(collapsed, "// [matched: arrow_function") {
+		t.Errorf("mid-line arrow must not be folded into an expression:\n%s", collapsed)
+	}
+	if !strings.Contains(collapsed, "requestAnimationFrame (() => {") {
+		t.Errorf("mid-line arrow must stay inline in the expression:\n%s", collapsed)
 	}
 }
 
@@ -469,10 +497,7 @@ func TestCollapse_PrefixCommentAbsorption(t *testing.T) {
 }
 
 func TestCollapse_StandaloneDedup(t *testing.T) {
-	// A function that was matched AND another block with the same name that
-	// is a distinct block (different ID, different parent) must keep its
-	// real source: there is no global (kind, name) collapse relation, so
-	// an unrelated block is never rewritten into a matched reference.
+	// Distinct IDs with the same name keep their own source.
 	matchedFn := ir.SemanticBlock{
 		ID:     "fn:relabel:10",
 		Kind:   ir.KindFunction,
@@ -506,10 +531,7 @@ func TestCollapse_StandaloneDedup(t *testing.T) {
 	}
 }
 
-// TestCollapse_AddedMethodNotRewritten: a second class gains a `foo`
-// method while class A's `foo` is matched. The ADDED B.foo must remain an
-// added block with its real source — global (kind, name) canonicalization
-// must not rewrite it into a "// [matched: method foo]" reference.
+// TestCollapse_AddedMethodNotRewritten keeps an added sibling method's source.
 func TestCollapse_AddedMethodNotRewritten(t *testing.T) {
 	mkMethod := func(id, name, src, parent string, start uint) *ir.SemanticBlock {
 		return &ir.SemanticBlock{
@@ -540,9 +562,7 @@ func TestCollapse_AddedMethodNotRewritten(t *testing.T) {
 	}
 }
 
-// TestCollapse_RemovedSiblingKeepsSource: a removed method that shares its
-// (kind, name) with a matched method in another container must keep its
-// real source (it is a distinct block, not a duplicate of the matched one).
+// TestCollapse_RemovedSiblingKeepsSource keeps a removed sibling's source.
 func TestCollapse_RemovedSiblingKeepsSource(t *testing.T) {
 	oldAFoo := &ir.SemanticBlock{
 		ID: "method:foo:oldA", Kind: ir.KindMethod, Name: "foo", Parent: "class:A:old",
@@ -574,13 +594,9 @@ func TestCollapse_RemovedSiblingKeepsSource(t *testing.T) {
 	}
 }
 
-// TestCollapse_SameNameDifferentParentNotCollapsed: a matched child in one
-// container must not cause an unrelated block with the same (kind, name) in
-// a DIFFERENT parent to be collapsed into a reference.
+// TestCollapse_SameNameDifferentParentNotCollapsed keeps parent-specific IDs.
 func TestCollapse_SameNameDifferentParentNotCollapsed(t *testing.T) {
-	// A matched method `render` inside class Foo, and a separately matched
-	// top-level function `render` (a rename pair). The function's parent is
-	// empty; collapsing must still work per ID without a global name map.
+	// A method and top-level function can share a name without sharing an ID.
 	newSrc := "function render() { return 1; }"
 
 	oldMethod := &ir.SemanticBlock{
@@ -607,12 +623,7 @@ func TestCollapse_SameNameDifferentParentNotCollapsed(t *testing.T) {
 	}
 }
 
-// TestCollapse_PrefixCommentAbsorptionSimilarityMatched: the prefix
-// comment changed slightly and is now a similarity match (not an exact
-// text match). Its old and new texts must still be absorbed into the
-// matched method's reference span on both sides, and the matched comment
-// pair must be suppressed from the standalone listings — collapse must
-// not depend on the comment having matched by identical text.
+// TestCollapse_PrefixCommentAbsorptionSimilarityMatched handles reworded prefixes.
 func TestCollapse_PrefixCommentAbsorptionSimilarityMatched(t *testing.T) {
 	oldSrc := "class BKnob {\n  // Handles the pointer down\n  pointerdown(event) {}\n}"
 	newSrc := "class BKnob {\n  // Handles the pointerdown\n  pointerdown(event) {}\n}"
@@ -658,13 +669,7 @@ func TestCollapse_PrefixCommentAbsorptionSimilarityMatched(t *testing.T) {
 
 	CollapseMatchedSubBlocks(result)
 
-	// The comment text CHANGED between the sides ("pointer down" →
-	// "pointerdown"), so the pair must SURVIVE even though both sides
-	// were absorbed into the matched method's reference: absorbing a
-	// reworded comment would hide the rewording, since the canonical
-	// references are identical on both sides (F11). The class pair still
-	// collapses identically — the reference replaces the method AND its
-	// prefix comment.
+	// Reworded absorbed comments remain visible beside the collapsed method.
 	var commentPair *ir.CorrelatedPair
 	for i := range result.Pairs {
 		p := &result.Pairs[i]
@@ -763,10 +768,7 @@ func TestAbsorbPrefixComments_ReturnsAbsorbedSources(t *testing.T) {
 }
 
 func TestCollapse_AdjacentChildrenKeepAllRefs(t *testing.T) {
-	// Two back-to-back matched children produce adjacent reference lines.
-	// absorbPrefixComments must not eat the first reference when processing
-	// the second (references are not prefix comments), or a matched child's
-	// reference silently disappears from its parent.
+	// Adjacent references must survive prefix-comment absorption.
 	oldSrc := "class Foo {\n  a() {}\n  b() {}\n}"
 	newSrc := oldSrc
 
@@ -919,13 +921,7 @@ func TestAbsorbPrefixComments_AdjacentRefsNotAbsorbed(t *testing.T) {
 	}
 }
 
-// TestCollapse_OneSidedAbsorptionKeepsStandaloneSide: a prefix comment
-// inside a class on the OLD side that moved to top level on the NEW side.
-// Only the old comment was absorbed into the matched method's reference;
-// the new comment remains standalone and its pair must stay in the
-// semantic report — a comment that remains standalone on one side is
-// never silently removed because its counterpart was absorbed on the
-// other side.
+// TestCollapse_OneSidedAbsorptionKeepsStandaloneSide preserves one-sided comments.
 func TestCollapse_OneSidedAbsorptionKeepsStandaloneSide(t *testing.T) {
 	oldSrc := "class BKnob {\n  // prefix note\n  pointerdown() {}\n}\n"
 	newSrc := "// prefix note\nclass BKnob {\n  pointerdown() {}\n}\n"
@@ -990,9 +986,7 @@ func TestCollapse_OneSidedAbsorptionKeepsStandaloneSide(t *testing.T) {
 	if commentPair.Old == nil || commentPair.New == nil {
 		t.Errorf("the moved comment must stay a matched pair, got %+v", commentPair)
 	}
-	// The old side was absorbed: the class source must no longer contain
-	// the comment text, and the comment's own pair is the only place it
-	// appears on the old side.
+	// The old class must replace the absorbed comment with its reference.
 	for _, p := range result.Pairs {
 		if p.Old != nil && p.Old.Kind == ir.KindClass {
 			if strings.Contains(p.Old.Source, "prefix note") {
@@ -1002,10 +996,7 @@ func TestCollapse_OneSidedAbsorptionKeepsStandaloneSide(t *testing.T) {
 	}
 }
 
-// TestCollapse_MovedBetweenParents: a prefix comment that moved from
-// class A to class B is absorbed into a matched reference on BOTH sides
-// (each side folds its own prefix comment), so the pair is suppressed —
-// the both-sides-absorbed behavior is preserved.
+// TestCollapse_MovedBetweenParents checks two-sided comment absorption.
 func TestCollapse_MovedBetweenParents(t *testing.T) {
 	classSrc := "class C {\n  // shared note\n  foo() {}\n}\n"
 	commentText := "// shared note"
@@ -1060,10 +1051,7 @@ func TestCollapse_MovedBetweenParents(t *testing.T) {
 	}
 }
 
-// TestCollapse_ChangedPrefixOneSideStandalone: the old prefix comment was
-// absorbed, but the new side reworded the comment AND moved it away from
-// the matched method (no longer a prefix), so only the old side was
-// absorbed. The pair must stay in the report.
+// TestCollapse_ChangedPrefixOneSideStandalone keeps a one-sided absorption visible.
 func TestCollapse_ChangedPrefixOneSideStandalone(t *testing.T) {
 	oldSrc := "class C {\n  // old wording\n  foo() {}\n}\n"
 	newSrc := "class C {\n  foo() {}\n}\n// new wording elsewhere\n"
@@ -1109,11 +1097,7 @@ func TestCollapse_ChangedPrefixOneSideStandalone(t *testing.T) {
 	}
 }
 
-// TestCollapse_DuplicateCommentTextOneSide: two identical comments on the
-// old side, only one of which is absorbed into a matched reference. The
-// absorbed occurrence is still a one-sided removal and must remain visible;
-// duplicate text must never remove either occurrence from the semantic
-// report.
+// TestCollapse_DuplicateCommentTextOneSide keeps duplicate comment occurrences.
 func TestCollapse_DuplicateCommentTextOneSide(t *testing.T) {
 	commentText := "// note"
 	oldSrc := "class C {\n  // note\n  foo() {}\n}\n// note\n"
@@ -1198,11 +1182,7 @@ func TestIsOnlyWhitespace(t *testing.T) {
 	}
 }
 
-// TestCollapse_ContainedElementInRemovedParent: a Lit template element nested
-// inside a removed helper (parentless, like JSX) that is part of a matched
-// pair must be replaced by its canonical reference inside the removed
-// parent's source — the element text must not render twice (once as raw
-// removed lines inside the parent blob, once as its own matched pair).
+// TestCollapse_ContainedElementInRemovedParent avoids duplicate element output.
 func TestCollapse_ContainedElementInRemovedParent(t *testing.T) {
 	elText := "<div id=\"sprite\">x</div>"
 	oldSrc := "const HTML = (t) => html`\n  " + elText + "\n`;\n"
@@ -1261,5 +1241,93 @@ func TestCollapse_ContainedElementInRemovedParent(t *testing.T) {
 	// rewrites the CONTAINER sources, never the pair's own text).
 	if el.Source != elText || newEl.Source != elText {
 		t.Errorf("matched element sources must stay intact: %q / %q", el.Source, newEl.Source)
+	}
+}
+
+func TestCollapse_TemplateMethodWithTrailingCommentOwnLine(t *testing.T) {
+	// Template headers and trailing comments must fold with their methods.
+	src := `class Loop {
+  virtual void wakeup() = 0;                  ///< Wakeup the loop.
+  template<IsLoopCallback Func>
+  void add(Func&& func);                       ///< Add a callback.
+  template<class Coroutine> requires IsAwaitable<ResultOf<Coroutine>>
+  void add(Coroutine&& c);
+}
+`
+	wakeupText := "virtual void wakeup() = 0;"
+	wakeupStart := strings.Index(src, wakeupText)
+	wakeupEnd := wakeupStart + len(wakeupText)
+
+	comment1Text := "///< Wakeup the loop."
+	comment1Start := strings.Index(src, comment1Text)
+
+	addText := "template<IsLoopCallback Func>\n  void add(Func&& func);"
+	addStart := strings.Index(src, "template<IsLoopCallback Func>")
+	addEnd := strings.Index(src, "void add(Func&& func);") + len("void add(Func&& func);")
+
+	comment2Text := "///< Add a callback."
+	comment2Start := strings.Index(src, comment2Text)
+
+	add2Text := "template<class Coroutine> requires IsAwaitable<ResultOf<Coroutine>>\n  void add(Coroutine&& c);"
+	add2Start := strings.Index(src, "template<class Coroutine> requires")
+	add2End := strings.Index(src, "void add(Coroutine&& c);") + len("void add(Coroutine&& c);")
+
+	mkPair := func(kind ir.BlockKind, id, name, parent string, start, end uint, source string) ir.CorrelatedPair {
+		b := ir.SemanticBlock{
+			ID: id, Kind: kind, Name: name, Parent: parent,
+			Span:   ir.SourceSpan{StartByte: start, EndByte: end},
+			Source: source,
+		}
+		return ir.CorrelatedPair{Old: &b, New: &b, Confidence: 1.0, MatchType: ir.MatchExactName}
+	}
+	class := func(id string) *ir.SemanticBlock {
+		return &ir.SemanticBlock{
+			ID: id, Kind: ir.KindClass, Name: "Loop",
+			Span:   ir.SourceSpan{StartByte: 0, EndByte: uint(len(src))},
+			Source: src,
+		}
+	}
+	oldClass, newClass := class("class:Loop:0"), class("class:Loop:1")
+	result := &ir.CorrelationResult{Pairs: []ir.CorrelatedPair{
+		{Old: oldClass, New: newClass, Confidence: 1.0, MatchType: ir.MatchExactName},
+		mkPair(ir.KindMethod, "method:wakeup:0", "wakeup", "class:Loop:0", uint(wakeupStart), uint(wakeupEnd), wakeupText),
+		mkPair(ir.KindComment, "comment:c1:0", "", "", uint(comment1Start), uint(comment1Start+len(comment1Text)), comment1Text),
+		mkPair(ir.KindMethod, "method:add:0", "add", "class:Loop:0", uint(addStart), uint(addEnd), addText),
+		mkPair(ir.KindComment, "comment:c2:0", "", "", uint(comment2Start), uint(comment2Start+len(comment2Text)), comment2Text),
+		mkPair(ir.KindMethod, "method:add:1", "add", "class:Loop:0", uint(add2Start), uint(add2End), add2Text),
+	}}
+
+	CollapseMatchedSubBlocks(result)
+
+	for _, p := range result.Pairs {
+		if p.Old != nil && p.Old.Kind == ir.KindClass {
+			col := p.Old.Source
+			if !strings.Contains(col, "// [matched: method wakeup]") {
+				t.Errorf("wakeup must fold to its own reference:\n%s", col)
+			}
+			if !strings.Contains(col, "// [matched: method add]") {
+				t.Errorf("template add must fold to a reference:\n%s", col)
+			}
+			// Every folded reference stands on a line by itself.
+			for _, line := range strings.Split(col, "\n") {
+				if strings.Count(line, "[matched: method ") > 1 {
+					t.Errorf("references must not share a line: %q", line)
+				}
+				trimmed := strings.TrimSpace(line)
+				if strings.HasPrefix(trimmed, "// [matched: method ") && !strings.HasSuffix(trimmed, "]") {
+					t.Errorf("reference line must be comment-only, got %q", line)
+				}
+			}
+			// The template headers and trailing comments fold into the refs.
+			if strings.Contains(col, "template<IsLoopCallback Func>") {
+				t.Errorf("template header must fold into the method reference:\n%s", col)
+			}
+			if strings.Contains(col, "IsAwaitable<ResultOf<Coroutine>>") {
+				t.Errorf("requires-clause template header must fold into the reference:\n%s", col)
+			}
+			if strings.Contains(col, comment1Text) || strings.Contains(col, comment2Text) {
+				t.Errorf("trailing doc comments must fold into the references:\n%s", col)
+			}
+		}
 	}
 }

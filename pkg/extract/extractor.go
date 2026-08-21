@@ -43,14 +43,33 @@ var lifecycleHooks = map[string]bool{
 	"unmounted":     true,
 }
 
+// Options configures language-dependent extraction behavior.
+type Options struct {
+	// SeparateMacroFunctions selects the C/C++ macro-function kind.
+	SeparateMacroFunctions bool
+}
+
 // Extractor walks a tree-sitter AST and produces a SemanticDocument.
 type Extractor struct {
 	filePath string
+	// SeparateMacroFunctions selects the macro-function kind when set.
+	SeparateMacroFunctions bool
+
+	// Class indexes resolve out-of-class C++ method parents.
+	classIDs        map[string]string
+	classIDsByName  map[string]string
+	containerScopes map[string]string
+	containerParent map[string]string
 }
 
-// New creates a new Extractor for the given file path.
+// New creates an Extractor with default options.
 func New(filePath string) *Extractor {
 	return &Extractor{filePath: filePath}
+}
+
+// NewWithOptions creates an Extractor with the given options.
+func NewWithOptions(filePath string, opts Options) *Extractor {
+	return &Extractor{filePath: filePath, SeparateMacroFunctions: opts.SeparateMacroFunctions}
 }
 
 // Extract walks the AST and produces a SemanticDocument with semantic blocks.
@@ -67,7 +86,17 @@ func (e *Extractor) Extract(ast *parser.AST) (*ir.SemanticDocument, error) {
 		ParseErrors: ast.ErrorCount(),
 	}
 
+	e.classIDs = make(map[string]string)
+	e.classIDsByName = make(map[string]string)
+	e.containerScopes = make(map[string]string)
+	e.containerParent = make(map[string]string)
+	e.indexCxxClasses(root, src, "", "")
 	e.walk(root, src, "", &doc.Blocks)
+
+	// C/C++ components carry their enclosing namespace/class path in reports.
+	if ast.Language().Name == "c" || ast.Language().Name == "cpp" {
+		stampScope(doc.Blocks)
+	}
 
 	return doc, nil
 }
@@ -86,13 +115,35 @@ func (e *Extractor) walk(node *tree_sitter.Node, src []byte, parentID string, bl
 
 	currentParent := parentID
 
+	// Extract all direct C/C++ declarators before walking their children.
+	special := false
+	switch node.Kind() {
+	case "declaration":
+		special = true
+		for _, block := range e.extractCDeclarationBlocks(node, src, parentID) {
+			*blocks = append(*blocks, block)
+		}
+	case "type_definition":
+		special = true
+		aliases := e.extractCTypeDefinitionBlocks(node, src, parentID)
+		for _, block := range aliases {
+			*blocks = append(*blocks, block)
+		}
+		if len(aliases) > 0 {
+			// Preserve the historical ownership of nested members in a typedef.
+			currentParent = aliases[0].ID
+		}
+	}
+
 	// Try to extract this node as a semantic block.
-	if block, ok := e.tryExtract(node, src, parentID); ok {
-		*blocks = append(*blocks, *block)
-		currentParent = block.ID
-		// An export-clause block owns its whole subtree; recursing would duplicate specifiers.
-		if node.Kind() == "export_statement" && e.firstChild(node, "export_clause", src) != nil {
-			return
+	if !special {
+		if block, ok := e.tryExtract(node, src, parentID); ok {
+			*blocks = append(*blocks, *block)
+			currentParent = block.ID
+			// An export-clause block owns its whole subtree; recursing would duplicate specifiers.
+			if node.Kind() == "export_statement" && e.firstChild(node, "export_clause", src) != nil {
+				return
+			}
 		}
 	}
 
@@ -186,6 +237,10 @@ func (e *Extractor) tryExtract(node *tree_sitter.Node, src []byte, parentID stri
 	case "arrow_function":
 		// Skipped here; handled by extractVariableDeclarator.
 		if parent := node.Parent(); parent != nil && parent.Kind() == "variable_declarator" {
+			return nil, false
+		}
+		// Function-local arrows stay inside their enclosing function.
+		if e.isInsideFunction(node) {
 			return nil, false
 		}
 		name := e.arrowFuncName(node, src)
@@ -309,12 +364,18 @@ func (e *Extractor) tryExtract(node *tree_sitter.Node, src []byte, parentID stri
 		// Anonymous function literal; skip (handled by enclosing declaration).
 		return nil, false
 
-	// --- Bash ---
+	// --- Bash / C / C++ ---
 
 	case "function_definition":
-		name := e.fieldText(node, "name", src)
+		name := e.fieldText(node, "name", src) // Bash: "name" field
 		if name == "" {
-			// Fallback: first named child that is a "word".
+			// C/C++ names come from the declarator chain.
+			if d := node.ChildByFieldName("declarator"); d != nil {
+				name = e.cDeclaratorName(d, src)
+			}
+		}
+		if name == "" {
+			// Bash fallback: first named child that is a "word".
 			for i := uint(0); i < node.NamedChildCount(); i++ {
 				c := node.NamedChild(i)
 				if c != nil && c.Kind() == "word" {
@@ -323,7 +384,25 @@ func (e *Extractor) tryExtract(node *tree_sitter.Node, src []byte, parentID stri
 				}
 			}
 		}
-		return e.newBlock(ir.KindFunction, name, text, span, parentID), true
+		// Local C++ types stay owned by their enclosing function.
+		if e.isInsideLocalCxxType(node) {
+			return nil, false
+		}
+		parentID = e.parentOutsideFriend(node, parentID)
+		blockKind := ir.KindFunction
+		// Class methods may be inline, templated, or qualified.
+		if e.isCxxClassMember(node) {
+			blockKind = ir.KindMethod
+		} else if scope, member, ok := e.cQualifiedMember(node, src); ok {
+			if classID := e.classIDForScope(scope, parentID); classID != "" {
+				blockKind = ir.KindMethod
+				name = member
+				parentID = classID
+			}
+		}
+		text, span = e.templateWrappedSource(node, src, text, span)
+		text, span = e.friendWrappedSource(node, src, text, span)
+		return e.newBlock(blockKind, name, text, span, parentID), true
 
 	case "variable_assignment":
 		if e.isInsideFunction(node) {
@@ -335,9 +414,372 @@ func (e *Extractor) tryExtract(node *tree_sitter.Node, src []byte, parentID stri
 		}
 		return e.newBlock(ir.KindVariable, name, text, span, parentID), true
 
+	// --- C ---
+
+	case "struct_specifier", "union_specifier":
+		// Local types stay inside their enclosing function.
+		if e.isInsideLocalCxxType(node) {
+			return nil, false
+		}
+		// Bodyless specifiers are not semantic type components.
+		if !e.cxxSpecifierHasBody(node) {
+			return nil, false
+		}
+		// Typedefs own their nested type specifiers.
+		if parent := node.Parent(); parent != nil && parent.Kind() == "type_definition" {
+			return nil, false
+		}
+		name := e.fieldText(node, "name", src)
+		if name == "" {
+			name = e.childText(node, "type_identifier", src)
+		}
+		text, span = e.templateWrappedSource(node, src, text, span)
+		text, span = e.extendToTerminator(node, src, span)
+		return e.newBlock(ir.KindClass, name, text, span, parentID), true
+
+	case "enum_specifier":
+		if e.isInsideLocalCxxType(node) {
+			return nil, false
+		}
+		if parent := node.Parent(); parent != nil && parent.Kind() == "type_definition" {
+			return nil, false
+		}
+		name := e.fieldText(node, "name", src)
+		if name == "" {
+			name = e.childText(node, "type_identifier", src)
+		}
+		text, span = e.templateWrappedSource(node, src, text, span)
+		text, span = e.extendToTerminator(node, src, span)
+		return e.newBlock(ir.KindEnum, name, text, span, parentID), true
+
+	case "declaration":
+		// Recurse into C/C++ declarations to extract their declarators.
+		return nil, false
+
+	case "init_declarator":
+		if e.isInsideFunction(node) {
+			return nil, false
+		}
+		value := node.ChildByFieldName("value")
+		if node.Parent() != nil && node.Parent().Kind() == "field_declaration" &&
+			(value == nil || value.Kind() != "lambda_expression") {
+			// Keep ordinary data members inside their class.
+			return nil, false
+		}
+		name := ""
+		declarator := node.ChildByFieldName("declarator")
+		if declarator != nil {
+			name = e.cDeclaratorName(declarator, src)
+		}
+		if name == "" {
+			name = e.firstIdentifier(node, src)
+		}
+		blockParentID := parentID
+		if scope, member, ok := e.cQualifiedMember(declarator, src); ok {
+			if classID := e.classIDForScope(scope, parentID); classID != "" {
+				name = member
+				blockParentID = classID
+			}
+		}
+		blockKind := ir.KindVariable
+		if e.declarationIsConst(node.Parent(), declarator, src) {
+			blockKind = ir.KindConstant
+		}
+		// C++: auto f = [](int x){...}; switches to a lambda block.
+		if value != nil && value.Kind() == "lambda_expression" {
+			blockKind = ir.KindLambda
+		}
+		// Sole declarators own the complete declaration.
+		source, span := e.declarationSource(node, src, span)
+		return e.newBlock(blockKind, name, source, span, blockParentID), true
+
+	case "preproc_include":
+		name := e.fieldText(node, "path", src)
+		if name == "" {
+			name = text
+		}
+		text, span = e.trimPreprocessorTerminator(text, span, src)
+		return e.newBlock(ir.KindImport, name, text, span, parentID), true
+
+	case "preproc_def":
+		name := e.fieldText(node, "name", src)
+		text, span = e.trimPreprocessorTerminator(text, span, src)
+		return e.newBlock(ir.KindConstant, name, text, span, parentID), true
+
+	case "preproc_function_def":
+		name := e.fieldText(node, "name", src)
+		kind := ir.KindFunction
+		if e.SeparateMacroFunctions {
+			kind = ir.KindMacroFunction
+		}
+		text, span = e.trimPreprocessorTerminator(text, span, src)
+		return e.newBlock(kind, name, text, span, parentID), true
+
+	// --- C++ ---
+
+	case "field_declaration":
+		if e.isInsideLocalCxxType(node) {
+			return nil, false
+		}
+		if d := node.ChildByFieldName("declarator"); d != nil && e.cDeclaratorIsFunction(d) {
+			name := e.cDeclaratorName(d, src)
+			text, span = e.templateWrappedSource(node, src, text, span)
+			return e.newBlock(ir.KindMethod, name, text, span, parentID), true
+		}
+		return nil, false
+
+	case "class_specifier":
+		if e.isInsideLocalCxxType(node) {
+			return nil, false
+		}
+		// Only body-bearing class specifiers become components.
+		if !e.cxxSpecifierHasBody(node) {
+			return nil, false
+		}
+		if parent := node.Parent(); parent != nil && parent.Kind() == "type_definition" {
+			return nil, false
+		}
+		name := e.fieldText(node, "name", src)
+		if name == "" {
+			name = e.childText(node, "type_identifier", src)
+		}
+		text, span = e.templateWrappedSource(node, src, text, span)
+		text, span = e.extendToTerminator(node, src, span)
+		return e.newBlock(ir.KindClass, name, text, span, parentID), true
+
+	case "namespace_definition":
+		if e.isInsideLocalCxxType(node) {
+			return nil, false
+		}
+		// Anonymous namespace has no name field → "".
+		name := e.fieldText(node, "name", src)
+		return e.newBlock(ir.KindNamespace, name, text, span, parentID), true
+
+	case "concept_definition":
+		if e.isInsideFunction(node) {
+			return nil, false
+		}
+		name := e.fieldText(node, "name", src)
+		text, span = e.templateWrappedSource(node, src, text, span)
+		return e.newBlock(ir.KindConcept, name, text, span, parentID), true
+
+	case "alias_declaration":
+		if e.isInsideFunction(node) {
+			return nil, false
+		}
+		// using X = ...;
+		name := e.fieldText(node, "name", src)
+		text, span = e.templateWrappedSource(node, src, text, span)
+		return e.newBlock(ir.KindTypeAlias, name, text, span, parentID), true
+
+	case "template_declaration":
+		// Recurse through the template wrapper without duplicating it.
+		return nil, false
+
+	case "lambda_expression":
+		if e.isInsideFunction(node) {
+			// Function-local lambdas stay inside their enclosing function.
+			return nil, false
+		}
+		if e.isInsideLocalCxxType(node) {
+			return nil, false
+		}
+		// A lambda under an init_declarator is owned by the declarator block.
+		if parent := node.Parent(); parent != nil && parent.Kind() == "init_declarator" {
+			return nil, false
+		} else if parent != nil && parent.Kind() == "field_declaration" {
+			// C++ class fields put the lambda directly under field_declaration.
+			name := e.firstIdentifier(parent, src)
+			return e.newBlock(ir.KindLambda, name, parent.Utf8Text(src), e.makeSpan(parent), parentID), true
+		}
+		// Bare lambdas get anonymous ordinals during correlation.
+		return e.newBlock(ir.KindLambda, "", text, span, parentID), true
+
 	default:
 		return nil, false
 	}
+}
+
+// extractCDeclarationBlocks extracts direct file-scope declarators.
+func (e *Extractor) extractCDeclarationBlocks(node *tree_sitter.Node, src []byte, parentID string) []ir.SemanticBlock {
+	if e.isInsideFunction(node) {
+		return nil
+	}
+
+	var blocks []ir.SemanticBlock
+	declarators := e.cDeclarationDeclarators(node)
+	declaratorCount := len(declarators)
+	for _, declarator := range declarators {
+		if declarator.Kind() == "init_declarator" {
+			continue // the normal walk extracts and classifies this child
+		}
+		name := e.cDeclaratorName(declarator, src)
+		if name == "" {
+			name = e.firstIdentifier(declarator, src)
+		}
+		kind := ir.KindVariable
+		blockParentID := e.parentOutsideFriend(node, parentID)
+		if e.cDeclaratorIsFunction(declarator) {
+			kind = ir.KindFunction
+			if e.isCxxClassMember(node) {
+				kind = ir.KindMethod
+			}
+			if scope, member, ok := e.cQualifiedMember(declarator, src); ok {
+				if classID := e.classIDForScope(scope, blockParentID); classID != "" {
+					kind = ir.KindMethod
+					name = member
+					blockParentID = classID
+				}
+			}
+		} else {
+			if scope, member, ok := e.cQualifiedMember(declarator, src); ok {
+				if classID := e.classIDForScope(scope, blockParentID); classID != "" {
+					name = member
+					blockParentID = classID
+				}
+			}
+			if e.declarationIsConst(node, declarator, src) {
+				kind = ir.KindConstant
+			}
+		}
+		text, span := e.declarationSource(declarator, src, e.makeSpan(declarator))
+		// Include a template header only for a sole declarator.
+		if declaratorCount == 1 {
+			text, span = e.templateWrappedSource(node, src, text, span)
+		}
+		text, span = e.friendWrappedSource(node, src, text, span)
+		blocks = append(blocks, *e.newBlock(kind, name, text, span, blockParentID))
+	}
+	return blocks
+}
+
+// extractCTypeDefinitionBlocks extracts each typedef declarator.
+func (e *Extractor) extractCTypeDefinitionBlocks(node *tree_sitter.Node, src []byte, parentID string) []ir.SemanticBlock {
+	if e.isInsideFunction(node) {
+		return nil
+	}
+
+	declarators := e.cDeclarationDeclarators(node)
+	if len(declarators) == 0 {
+		// Keep malformed typedefs visible with a best-effort name.
+		name := e.childText(node, "type_identifier", src)
+		if name == "" && node.NamedChildCount() > 0 {
+			name = node.NamedChild(node.NamedChildCount() - 1).Utf8Text(src)
+		}
+		return []ir.SemanticBlock{*e.newBlock(ir.KindTypeAlias, name, node.Utf8Text(src), e.makeSpan(node), parentID)}
+	}
+
+	blocks := make([]ir.SemanticBlock, 0, len(declarators))
+	for _, declarator := range declarators {
+		name := e.cDeclaratorName(declarator, src)
+		if name == "" {
+			// Primitive typedef names need a text fallback.
+			name = declarator.Utf8Text(src)
+		}
+		text, span := declarator.Utf8Text(src), e.makeSpan(declarator)
+		if len(declarators) == 1 {
+			text, span = node.Utf8Text(src), e.makeSpan(node)
+		}
+		blocks = append(blocks, *e.newBlock(ir.KindTypeAlias, name, text, span, parentID))
+	}
+	return blocks
+}
+
+// cDeclarationDeclarators returns direct declarators in source order.
+func (e *Extractor) cDeclarationDeclarators(node *tree_sitter.Node) []*tree_sitter.Node {
+	first := node.ChildByFieldName("declarator")
+	if first == nil {
+		return nil
+	}
+
+	var declarators []*tree_sitter.Node
+	foundFirst := false
+	for i := uint(0); i < node.NamedChildCount(); i++ {
+		child := node.NamedChild(i)
+		if child == nil || child.StartByte() < first.StartByte() {
+			continue
+		}
+		if child.StartByte() == first.StartByte() && child.EndByte() == first.EndByte() {
+			declarators = append(declarators, child)
+			foundFirst = true
+			continue
+		}
+		if e.isCDeclaratorNode(child) {
+			declarators = append(declarators, child)
+		}
+	}
+	if !foundFirst {
+		declarators = append([]*tree_sitter.Node{first}, declarators...)
+	}
+	return declarators
+}
+
+// isCDeclaratorNode identifies direct C/C++ declarator shapes.
+func (e *Extractor) isCDeclaratorNode(node *tree_sitter.Node) bool {
+	if node == nil {
+		return false
+	}
+	switch node.Kind() {
+	case "identifier", "type_identifier", "field_identifier", "namespace_identifier",
+		"qualified_identifier", "operator_name", "operator_cast", "template_function",
+		"pointer_declarator", "array_declarator", "function_declarator",
+		"parenthesized_declarator", "attributed_declarator", "reference_declarator",
+		"structured_binding_declarator", "init_declarator":
+		return true
+	default:
+		return false
+	}
+}
+
+// cDeclaratorIsFunction distinguishes function prototypes from pointer variables.
+func (e *Extractor) cDeclaratorIsFunction(node *tree_sitter.Node) bool {
+	if node == nil {
+		return false
+	}
+	switch node.Kind() {
+	case "operator_cast":
+		return true
+	case "function_declarator":
+		inner := node.ChildByFieldName("declarator")
+		return e.cFunctionNameRoot(inner)
+	case "pointer_declarator", "reference_declarator", "attributed_declarator":
+		return e.cDeclaratorIsFunction(e.cUnderlyingDeclarator(node))
+	default:
+		return false
+	}
+}
+
+// cFunctionNameRoot distinguishes functions from pointer objects.
+func (e *Extractor) cFunctionNameRoot(node *tree_sitter.Node) bool {
+	if node == nil {
+		return false
+	}
+	switch node.Kind() {
+	case "identifier", "type_identifier", "field_identifier", "namespace_identifier",
+		"qualified_identifier", "operator_name", "operator_cast", "template_function":
+		return true
+	case "attributed_declarator":
+		return e.cFunctionNameRoot(e.cUnderlyingDeclarator(node))
+	default:
+		return false
+	}
+}
+
+// cUnderlyingDeclarator finds a wrapper's nested declarator.
+func (e *Extractor) cUnderlyingDeclarator(node *tree_sitter.Node) *tree_sitter.Node {
+	if node == nil {
+		return nil
+	}
+	if d := node.ChildByFieldName("declarator"); d != nil {
+		return d
+	}
+	for i := uint(0); i < node.NamedChildCount(); i++ {
+		child := node.NamedChild(i)
+		if e.isCDeclaratorNode(child) {
+			return child
+		}
+	}
+	return nil
 }
 
 // extractVariableDeclarator extracts a const/let/var declaration as a block.
@@ -417,6 +859,19 @@ func (e *Extractor) declarationSource(node *tree_sitter.Node, src []byte, span i
 			!e.hasExactlyOneNamedChildOfKind(parent, "var_spec") {
 			return node.Utf8Text(src), span
 		}
+	case "field_declaration":
+		if e.hasExactlyOneNamedChildOfKind(parent, "init_declarator") {
+			return parent.Utf8Text(src), e.makeSpan(parent)
+		}
+		return node.Utf8Text(src), span
+	case "declaration":
+		// Keep an object after an inline type specifier non-overlapping.
+		if len(e.cDeclarationDeclarators(parent)) != 1 {
+			return node.Utf8Text(src), span
+		}
+		if e.hasCInlineTypeSpecifier(parent) {
+			return e.cDeclaratorWithTerminator(node, src, span)
+		}
 	default:
 		return node.Utf8Text(src), span
 	}
@@ -427,6 +882,41 @@ func (e *Extractor) declarationSource(node *tree_sitter.Node, src []byte, span i
 		base = gp
 	}
 	return e.extendToTerminator(base, src, e.makeSpan(base))
+}
+
+// hasCInlineTypeSpecifier reports inline type definitions.
+func (e *Extractor) hasCInlineTypeSpecifier(node *tree_sitter.Node) bool {
+	for i := uint(0); i < node.NamedChildCount(); i++ {
+		child := node.NamedChild(i)
+		if child == nil {
+			continue
+		}
+		switch child.Kind() {
+		case "struct_specifier", "union_specifier", "enum_specifier", "class_specifier":
+			return true
+		}
+	}
+	return false
+}
+
+// cDeclaratorWithTerminator retains a declarator's semicolon.
+func (e *Extractor) cDeclaratorWithTerminator(node *tree_sitter.Node, src []byte, span ir.SourceSpan) (string, ir.SourceSpan) {
+	parent := node.Parent()
+	if parent == nil {
+		return node.Utf8Text(src), span
+	}
+	for i := uint(0); i < parent.ChildCount(); i++ {
+		child := parent.Child(i)
+		if child == nil || child.Kind() != ";" || child.StartByte() < node.EndByte() {
+			continue
+		}
+		span.EndByte = child.EndByte()
+		end := child.EndPosition()
+		span.EndLine = end.Row
+		span.EndCol = end.Column
+		return string(src[span.StartByte:span.EndByte]), span
+	}
+	return node.Utf8Text(src), span
 }
 
 // typeDeclarationSource: sole specs cover the whole declaration ("type" keyword
@@ -643,6 +1133,32 @@ func (e *Extractor) makeSpan(node *tree_sitter.Node) ir.SourceSpan {
 	}
 }
 
+// trimPreprocessorTerminator removes a directive's trailing line ending.
+func (e *Extractor) trimPreprocessorTerminator(text string, span ir.SourceSpan, src []byte) (string, ir.SourceSpan) {
+	start, end := int(span.StartByte), int(span.EndByte)
+	trimmedEnd := end
+	for trimmedEnd > start && (src[trimmedEnd-1] == '\n' || src[trimmedEnd-1] == '\r') {
+		trimmedEnd--
+	}
+	if trimmedEnd == end {
+		return text, span
+	}
+
+	line, col := span.StartLine, span.StartCol
+	for i := start; i < trimmedEnd; i++ {
+		if src[i] == '\n' {
+			line++
+			col = 0
+		} else {
+			col++
+		}
+	}
+	span.EndByte = uint(trimmedEnd)
+	span.EndLine = line
+	span.EndCol = col
+	return string(src[start:trimmedEnd]), span
+}
+
 // childText returns the source text of the first named child with the given kind.
 func (e *Extractor) childText(node *tree_sitter.Node, kind string, src []byte) string {
 	for i := uint(0); i < node.NamedChildCount(); i++ {
@@ -686,6 +1202,271 @@ func (e *Extractor) hasChildKind(node *tree_sitter.Node, kind string) bool {
 	return false
 }
 
+// stampScope records enclosing C/C++ namespace and class names.
+func stampScope(blocks []ir.SemanticBlock) {
+	byID := make(map[string]*ir.SemanticBlock, len(blocks))
+	for i := range blocks {
+		byID[blocks[i].ID] = &blocks[i]
+	}
+	for i := range blocks {
+		blocks[i].Scope = scopePath(&blocks[i], byID)
+	}
+}
+
+// scopePath returns enclosing namespace and class names.
+func scopePath(b *ir.SemanticBlock, byID map[string]*ir.SemanticBlock) string {
+	var parts []string
+	for cur := b; ; {
+		if cur.Parent == "" {
+			break
+		}
+		parent, ok := byID[cur.Parent]
+		if !ok || parent == cur {
+			break
+		}
+		if (parent.Kind == ir.KindNamespace || parent.Kind == ir.KindClass) && parent.Name != "" {
+			parts = append([]string{parent.Name}, parts...)
+		}
+		cur = parent
+	}
+	return strings.Join(parts, "::")
+}
+
+// indexCxxClasses records qualified class paths before extraction.
+func (e *Extractor) indexCxxClasses(node *tree_sitter.Node, src []byte, scope, parentID string) {
+	if node == nil {
+		return
+	}
+
+	nextScope, nextParentID := scope, parentID
+	switch node.Kind() {
+	case "namespace_definition":
+		name := e.fieldText(node, "name", src)
+		if name == "" {
+			name = e.childText(node, "namespace_identifier", src)
+		}
+		nextScope = joinCxxScope(scope, name)
+		span := e.makeSpan(node)
+		nextParentID = fmt.Sprintf("%s:%s:%d", ir.KindNamespace, name, span.StartByte)
+		e.containerScopes[nextParentID] = nextScope
+		e.containerParent[nextParentID] = parentID
+
+	case "class_specifier", "struct_specifier", "union_specifier":
+		name := e.fieldText(node, "name", src)
+		if name == "" {
+			name = e.childText(node, "type_identifier", src)
+		}
+		if name != "" && e.cxxSpecifierHasBody(node) {
+			if parent := node.Parent(); parent == nil || parent.Kind() != "type_definition" {
+				nextScope = joinCxxScope(scope, name)
+				_, span := e.templateWrappedSource(node, src, node.Utf8Text(src), e.makeSpan(node))
+				nextParentID = fmt.Sprintf("%s:%s:%d", ir.KindClass, name, span.StartByte)
+				e.containerScopes[nextParentID] = nextScope
+				e.containerParent[nextParentID] = parentID
+				if _, exists := e.classIDs[nextScope]; !exists {
+					e.classIDs[nextScope] = nextParentID
+				}
+				if previous, exists := e.classIDsByName[name]; exists && previous != nextParentID {
+					e.classIDsByName[name] = ""
+				} else {
+					e.classIDsByName[name] = nextParentID
+				}
+			}
+		}
+	}
+
+	for i := uint(0); i < node.ChildCount(); i++ {
+		e.indexCxxClasses(node.Child(i), src, nextScope, nextParentID)
+	}
+}
+
+func joinCxxScope(parent, name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return parent
+	}
+	if parent == "" {
+		return name
+	}
+	return parent + "::" + name
+}
+
+// templateWrappedSource includes a declaration's template header.
+func (e *Extractor) templateWrappedSource(node *tree_sitter.Node, src []byte, text string, span ir.SourceSpan) (string, ir.SourceSpan) {
+	if parent := node.Parent(); parent != nil && parent.Kind() == "template_declaration" {
+		return parent.Utf8Text(src), e.makeSpan(parent)
+	}
+	return text, span
+}
+
+// isCxxTypeContainerKind identifies C++ scope containers.
+func isCxxTypeContainerKind(kind string) bool {
+	switch kind {
+	case "class_specifier", "struct_specifier", "union_specifier", "enum_specifier", "namespace_definition":
+		return true
+	default:
+		return false
+	}
+}
+
+// isInsideLocalCxxType reports whether a node belongs to a local type.
+func (e *Extractor) isInsideLocalCxxType(node *tree_sitter.Node) bool {
+	for p := node; p != nil; p = p.Parent() {
+		if !isCxxTypeContainerKind(p.Kind()) {
+			continue
+		}
+		for ancestor := p.Parent(); ancestor != nil; ancestor = ancestor.Parent() {
+			switch ancestor.Kind() {
+			case "function_declaration", "method_declaration", "method_definition",
+				"func_literal", "function_expression", "function_definition",
+				"arrow_function", "lambda_expression":
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// cxxSpecifierHasBody reports whether a type specifier has a body.
+func (e *Extractor) cxxSpecifierHasBody(node *tree_sitter.Node) bool {
+	for i := uint(0); i < node.NamedChildCount(); i++ {
+		if c := node.NamedChild(i); c != nil && c.Kind() == "field_declaration_list" {
+			return true
+		}
+	}
+	return false
+}
+
+// isCxxClassMember recognizes inline members and excludes friends.
+func (e *Extractor) isCxxClassMember(node *tree_sitter.Node) bool {
+	for p := node.Parent(); p != nil; p = p.Parent() {
+		if p.Kind() == "friend_declaration" {
+			return false
+		}
+		switch p.Kind() {
+		case "class_specifier", "struct_specifier", "union_specifier":
+			return true
+		case "function_definition", "lambda_expression":
+			return false
+		}
+	}
+	return false
+}
+
+func (e *Extractor) parentOutsideFriend(node *tree_sitter.Node, parentID string) string {
+	for p := node.Parent(); p != nil; p = p.Parent() {
+		if p.Kind() != "friend_declaration" {
+			continue
+		}
+		if outer, ok := e.containerParent[parentID]; ok {
+			return outer
+		}
+		return ""
+	}
+	return parentID
+}
+
+func (e *Extractor) friendWrappedSource(node *tree_sitter.Node, src []byte, text string, span ir.SourceSpan) (string, ir.SourceSpan) {
+	for p := node.Parent(); p != nil; p = p.Parent() {
+		if p.Kind() == "friend_declaration" {
+			return p.Utf8Text(src), e.makeSpan(p)
+		}
+	}
+	return text, span
+}
+
+// cQualifiedMember splits a qualified member declarator.
+func (e *Extractor) cQualifiedMember(node *tree_sitter.Node, src []byte) (string, string, bool) {
+	if node == nil {
+		return "", "", false
+	}
+	if node.Kind() == "qualified_identifier" {
+		qualified := strings.TrimSpace(node.Utf8Text(src))
+		cut := strings.LastIndex(qualified, "::")
+		if cut <= 0 || cut+2 >= len(qualified) {
+			return "", "", false
+		}
+		return qualified[:cut], normalizeCxxMemberName(qualified[cut+2:]), true
+	}
+	var child *tree_sitter.Node
+	if d := node.ChildByFieldName("declarator"); d != nil {
+		child = d
+	} else {
+		child = e.cUnderlyingDeclarator(node)
+	}
+	return e.cQualifiedMember(child, src)
+}
+
+// classIDForScope resolves a qualified class scope to an extracted class.
+func (e *Extractor) classIDForScope(scope, parentID string) string {
+	scope = normalizeCxxScope(scope)
+	if scope == "" {
+		return ""
+	}
+	if !strings.Contains(scope, "::") {
+		if parentScope := e.containerScopes[parentID]; parentScope != "" {
+			if id := e.classIDs[joinCxxScope(parentScope, scope)]; id != "" {
+				return id
+			}
+		}
+	}
+	if id := e.classIDs[scope]; id != "" {
+		return id
+	}
+	if i := strings.LastIndex(scope, "::"); i >= 0 {
+		scope = scope[i+2:]
+	}
+	return e.classIDsByName[scope]
+}
+
+func normalizeCxxMemberName(name string) string {
+	name = strings.TrimSpace(name)
+	if strings.HasPrefix(name, "operator ") {
+		if i := strings.IndexByte(name, '('); i >= 0 {
+			return strings.TrimSpace(name[:i])
+		}
+	}
+	return name
+}
+
+func normalizeCxxScope(scope string) string {
+	var parts []string
+	for _, part := range splitCxxScope(scope) {
+		part = strings.TrimSpace(part)
+		if i := strings.IndexByte(part, '<'); i >= 0 {
+			part = part[:i]
+		}
+		if part != "" {
+			parts = append(parts, part)
+		}
+	}
+	return strings.Join(parts, "::")
+}
+
+func splitCxxScope(scope string) []string {
+	scope = strings.TrimSpace(scope)
+	var parts []string
+	start, depth := 0, 0
+	for i := 0; i < len(scope); i++ {
+		switch scope[i] {
+		case '<':
+			depth++
+		case '>':
+			if depth > 0 {
+				depth--
+			}
+		case ':':
+			if depth == 0 && i+1 < len(scope) && scope[i+1] == ':' {
+				parts = append(parts, scope[start:i])
+				i++
+				start = i + 1
+			}
+		}
+	}
+	parts = append(parts, scope[start:])
+	return parts
+}
+
 // isInsideFunction: locals and inner declarations are not extracted (no duplication of the enclosing block).
 func (e *Extractor) isInsideFunction(node *tree_sitter.Node) bool {
 	p := node.Parent()
@@ -693,7 +1474,7 @@ func (e *Extractor) isInsideFunction(node *tree_sitter.Node) bool {
 		switch p.Kind() {
 		case "function_declaration", "method_declaration", "method_definition",
 			"func_literal", "function_expression", "function_definition",
-			"arrow_function":
+			"arrow_function", "lambda_expression":
 			return true
 		}
 		p = p.Parent()
@@ -709,11 +1490,130 @@ func (e *Extractor) firstIdentifier(node *tree_sitter.Node, src []byte) string {
 			continue
 		}
 		k := child.Kind()
-		if k == "identifier" || k == "property_identifier" || k == "type_identifier" {
+		if k == "identifier" || k == "property_identifier" || k == "type_identifier" || k == "field_identifier" {
 			return child.Utf8Text(src)
 		}
 	}
 	return ""
+}
+
+// cDeclaratorName resolves names through C/C++ declarator wrappers.
+func (e *Extractor) cDeclaratorName(node *tree_sitter.Node, src []byte) string {
+	if node == nil {
+		return ""
+	}
+	switch node.Kind() {
+	case "identifier", "type_identifier", "field_identifier", "namespace_identifier":
+		return node.Utf8Text(src)
+	case "destructor_name", "qualified_identifier", "operator_name", "template_function":
+		// Keep the full token ("~Foo", "Foo::bar", "operator=", "f<int>") as the name.
+		return node.Utf8Text(src)
+	case "operator_cast":
+		if typeNode := node.ChildByFieldName("type"); typeNode != nil {
+			return "operator " + typeNode.Utf8Text(src)
+		}
+		return node.Utf8Text(src)
+	case "function_declarator", "pointer_declarator", "array_declarator":
+		if d := node.ChildByFieldName("declarator"); d != nil {
+			return e.cDeclaratorName(d, src)
+		}
+		return ""
+	case "parenthesized_declarator", "attributed_declarator", "reference_declarator":
+		// Recurse through named declarator children and skip qualifiers.
+		for i := uint(0); i < node.NamedChildCount(); i++ {
+			c := node.NamedChild(i)
+			if c == nil {
+				continue
+			}
+			if cDeclaratorContainerKinds[c.Kind()] || cDeclaratorTerminalKinds[c.Kind()] {
+				return e.cDeclaratorName(c, src)
+			}
+		}
+		return ""
+	}
+	return ""
+}
+
+// cDeclaratorContainerKinds are the recursive declarator wrappers descended by cDeclaratorName.
+var cDeclaratorContainerKinds = map[string]bool{
+	"function_declarator":      true,
+	"pointer_declarator":       true,
+	"array_declarator":         true,
+	"parenthesized_declarator": true,
+	"attributed_declarator":    true,
+	"reference_declarator":     true,
+}
+
+// cDeclaratorTerminalKinds are the name-bearing terminals reached by cDeclaratorName.
+var cDeclaratorTerminalKinds = map[string]bool{
+	"identifier":           true,
+	"type_identifier":      true,
+	"field_identifier":     true,
+	"namespace_identifier": true,
+	"destructor_name":      true,
+	"qualified_identifier": true,
+	"operator_name":        true,
+	"template_function":    true,
+	"operator_cast":        true,
+}
+
+// declarationIsConst distinguishes base-type and object qualifiers.
+func (e *Extractor) declarationIsConst(declaration, declarator *tree_sitter.Node, src []byte) bool {
+	if declaration == nil || declaration.Kind() != "declaration" {
+		return false
+	}
+	baseConst := false
+	for i := uint(0); i < declaration.NamedChildCount(); i++ {
+		child := declaration.NamedChild(i)
+		if child == nil || child.Kind() != "type_qualifier" {
+			continue
+		}
+		qualifier := child.Utf8Text(src)
+		if qualifier == "const" || qualifier == "constexpr" {
+			baseConst = true
+			break
+		}
+	}
+	return e.cObjectIsConst(declarator, baseConst, src)
+}
+
+// cObjectIsConst applies qualifiers to the declared object.
+func (e *Extractor) cObjectIsConst(declarator *tree_sitter.Node, baseConst bool, src []byte) bool {
+	if declarator == nil {
+		return baseConst
+	}
+	switch declarator.Kind() {
+	case "pointer_declarator", "reference_declarator":
+		return e.declaratorHasConstQualifier(declarator, src)
+	case "parenthesized_declarator", "attributed_declarator":
+		return e.cObjectIsConst(e.cUnderlyingDeclarator(declarator), baseConst, src)
+	case "function_declarator":
+		// A parenthesized pointer under a function declarator is an object.
+		inner := declarator.ChildByFieldName("declarator")
+		if inner != nil && (inner.Kind() == "parenthesized_declarator" || inner.Kind() == "attributed_declarator") {
+			return e.cObjectIsConst(inner, baseConst, src)
+		}
+		return false
+	case "array_declarator":
+		return baseConst || e.declaratorHasConstQualifier(declarator, src)
+	default:
+		return baseConst
+	}
+}
+
+// declaratorHasConstQualifier checks direct declarator qualifiers.
+func (e *Extractor) declaratorHasConstQualifier(declarator *tree_sitter.Node, src []byte) bool {
+	for i := uint(0); i < declarator.NamedChildCount(); i++ {
+		child := declarator.NamedChild(i)
+		if child == nil || child.Kind() != "type_qualifier" {
+			continue
+		}
+		qualifier := child.Utf8Text(src)
+		if qualifier == "const" || qualifier == "constexpr" {
+			return true
+		}
+	}
+	return false
 }
 
 // stringValue extracts the value from a string literal node.

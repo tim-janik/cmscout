@@ -58,6 +58,147 @@ func TestTextReport_AddedRemoved(t *testing.T) {
 	}
 }
 
+func TestTextReport_LambdaHeaderAndConverted(t *testing.T) {
+	result := &ir.CorrelationResult{
+		Pairs: []ir.CorrelatedPair{
+			{
+				Old:        &ir.SemanticBlock{Kind: ir.KindLambda, Name: "pred", Source: "auto pred = [](int a) { return a > 0; };"},
+				New:        &ir.SemanticBlock{Kind: ir.KindLambda, Name: "pred", Source: "auto pred = [](int a) { return a > 0; };"},
+				Confidence: 1.0,
+				MatchType:  ir.MatchExactName,
+			},
+			{
+				Old:        &ir.SemanticBlock{Kind: ir.KindLambda, Name: "handler", Source: "auto handler = [](int a) { return a > 0; };"},
+				New:        &ir.SemanticBlock{Kind: ir.KindArrowFunc, Name: "handler", Source: "const handler = (a) => a > 0;"},
+				Confidence: 0.9,
+				MatchType:  ir.MatchSimilarity,
+				InnerDiff: &ir.DiffResult{
+					Hunks: []ir.DiffHunk{
+						{
+							OldStart: 1, OldLines: 1, NewStart: 1, NewLines: 1,
+							Lines: []ir.DiffLine{
+								{Content: "auto handler = [](int a) { return a > 0; };", Type: ir.DiffLineRemoved, OldNo: 1},
+								{Content: "const handler = (a) => a > 0;", Type: ir.DiffLineAdded, NewNo: 1},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	r := &TextReporter{Opts: Options{NoColor: true}}
+	var buf bytes.Buffer
+	if err := r.Write(&buf, result, "old.cc", "new.cc"); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	// C++ lambda pairs render under a "Lambdas" section.
+	if !strings.Contains(out, "\nLambdas\n") {
+		t.Errorf("expected a 'Lambdas' section, got:\n%s", out)
+	}
+	// A lambda-to-arrow conversion is a matched [converted] pair.
+	if !strings.Contains(out, "[converted]") {
+		t.Errorf("expected [converted] tag on the lambda→arrow pair, got:\n%s", out)
+	}
+}
+
+func TestTextReport_NoNamespaceSectionAndScopeTags(t *testing.T) {
+	mk := func(kind ir.BlockKind, name, scope string) *ir.SemanticBlock {
+		b := &ir.SemanticBlock{Kind: kind, Name: name, Scope: scope, Source: name + "() { return 1; }"}
+		return b
+	}
+	result := &ir.CorrelationResult{
+		Pairs: []ir.CorrelatedPair{
+			{Old: mk(ir.KindNamespace, "app", ""), New: mk(ir.KindNamespace, "app", ""), Confidence: 1.0, MatchType: ir.MatchExactName},
+			{Old: mk(ir.KindFunction, "greet", "app"), New: mk(ir.KindFunction, "greet", "app"), Confidence: 1.0, MatchType: ir.MatchExactName},
+			{Old: mk(ir.KindMethod, "value", "app::Widget"), New: mk(ir.KindMethod, "value", "app::Widget"), Confidence: 1.0, MatchType: ir.MatchExactName},
+			{Old: mk(ir.KindFunction, "main", ""), New: mk(ir.KindFunction, "main", ""), Confidence: 1.0, MatchType: ir.MatchExactName},
+		},
+	}
+
+	r := &TextReporter{Opts: Options{NoColor: true}}
+	var buf bytes.Buffer
+	if err := r.Write(&buf, result, "old.cpp", "new.cpp"); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+
+	// A namespace is a space, not a diffed component: no Namespaces section.
+	if strings.Contains(out, "\nNamespaces\n") {
+		t.Errorf("namespaces must not be rendered as a section, got:\n%s", out)
+	}
+	// Scope annotations follow the name and precede status tags.
+	if !strings.Contains(out, "greet  [in app]  100% similarity") {
+		t.Errorf("expected a namespace-scoped function header, got:\n%s", out)
+	}
+	if !strings.Contains(out, "[in app::Widget]") {
+		t.Errorf("expected a method header tagged with its class scope, got:\n%s", out)
+	}
+	// Plain C functions outside any namespace show no scope tag.
+	if strings.Contains(out, "main  100% similarity  [in") {
+		t.Errorf("top-level C function must have no scope tag, got:\n%s", out)
+	}
+}
+
+// TestTextReport_NestedAddedMemberInlineOnly keeps added members inside classes.
+func TestTextReport_NestedAddedMemberInlineOnly(t *testing.T) {
+	className := &ir.SemanticBlock{
+		ID:     "class:Loop:76",
+		Kind:   ir.KindClass,
+		Name:   "Loop",
+		Scope:  "Ase",
+		Source: "class Loop {\n  void run();\n}\n",
+		Span:   ir.SourceSpan{StartByte: 0, EndByte: 100},
+	}
+	method := &ir.SemanticBlock{
+		ID:     "method:delay:131",
+		Kind:   ir.KindMethod,
+		Name:   "delay",
+		Scope:  "Ase::Loop",
+		Parent: "class:Loop:76",
+		Source: "  std::shared_ptr<void> delay ();\n",
+		Span:   ir.SourceSpan{StartByte: 20, EndByte: 60},
+	}
+	result := &ir.CorrelationResult{
+		Pairs: []ir.CorrelatedPair{
+			{
+				Old:        className,
+				New:        className,
+				Confidence: 1.0,
+				MatchType:  ir.MatchExactName,
+				InnerDiff: &ir.DiffResult{
+					Hunks: []ir.DiffHunk{
+						{
+							OldStart: 1, OldLines: 2, NewStart: 1, NewLines: 3,
+							Lines: []ir.DiffLine{
+								{Content: "class Loop {", Type: ir.DiffLineContext, OldNo: 1, NewNo: 1},
+								{Content: "  void run();", Type: ir.DiffLineContext, OldNo: 2, NewNo: 2},
+								{Content: "  std::shared_ptr<void> delay ();", Type: ir.DiffLineAdded, NewNo: 3},
+								{Content: "}", Type: ir.DiffLineContext, OldNo: 3, NewNo: 4},
+							},
+						},
+					},
+				},
+			},
+			{Old: nil, New: method, Confidence: 0.0, MatchType: ir.MatchNone},
+		},
+	}
+
+	r := &TextReporter{Opts: Options{NoColor: true}}
+	var buf bytes.Buffer
+	if err := r.Write(&buf, result, "loop.hh", "loop.hh"); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "  +   std::shared_ptr<void> delay ();") {
+		t.Errorf("the added method must render inline in the class diff:\n%s", out)
+	}
+	if strings.Contains(out, "delay  [added]") {
+		t.Errorf("the added member must not be duplicated as a standalone block:\n%s", out)
+	}
+}
+
 func TestTextReport_MatchedWithChanges(t *testing.T) {
 	result := &ir.CorrelationResult{
 
@@ -845,14 +986,7 @@ func TestTextReport_DeterministicOrdering(t *testing.T) {
 	}
 }
 
-// TestWhitespaceClassificationLexical: whitespace-only classification must
-// be lexical, not byte-naive. Meaningful changes inside strings, template
-// literals, comments, regex literals, template interpolations, and at
-// identifier/operator boundaries increment Changed; pure formatting
-// changes (indentation, trailing space, operator and brace spacing) alone
-// increment Whitespace. Multi-character operators are single tokens, so
-// splitting one apart (x === y → x = = = y) is a change while spacing
-// around it is not (F10).
+// TestWhitespaceClassificationLexical checks token-aware formatting changes.
 func TestWhitespaceClassificationLexical(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -933,10 +1067,7 @@ func TestWhitespaceClassificationLexical(t *testing.T) {
 	}
 }
 
-// TestSummary_WhitespaceClassificationLexical: the summary counters must
-// follow the lexical classification — a meaningful string/comment/token
-// change increments Changed (and no Whitespace row appears), while a pure
-// formatting change increments Whitespace.
+// TestWhitespaceClassificationUsesSourceLanguage checks per-language lexing.
 func TestWhitespaceClassificationUsesSourceLanguage(t *testing.T) {
 	pair := &ir.CorrelatedPair{
 		Old: &ir.SemanticBlock{Source: "var s = `a ${ x } b`"},
@@ -962,8 +1093,117 @@ func TestWhitespaceClassificationUsesSourceLanguage(t *testing.T) {
 	if isWhitespaceOnlyMatchForLanguages(bashComment, "bash", "bash") {
 		t.Error("spacing inside an unspaced Bash comment is source content")
 	}
+	// C++ raw-string content is semantic.
+	cppPair := &ir.CorrelatedPair{
+		Old: &ir.SemanticBlock{Source: `auto s = R"(a b)";`},
+		New: &ir.SemanticBlock{Source: `auto s = R"(ab)";`},
+	}
+	if isWhitespaceOnlyMatchForLanguages(cppPair, "cpp", "cpp") {
+		t.Error("a content change inside a C++ raw string is semantic, not whitespace")
+	}
+	// Encoding-prefixed raw strings remain atomic.
+	prefixedRaw := &ir.CorrelatedPair{
+		Old: &ir.SemanticBlock{Source: `auto s=u8R"tag(a " b)tag";`},
+		New: &ir.SemanticBlock{Source: `auto s = u8R"tag(a  " b)tag";`},
+	}
+	if isWhitespaceOnlyMatchForLanguages(prefixedRaw, "cpp", "cpp") {
+		t.Error("whitespace inside a prefixed C++ raw string is source content, not formatting")
+	}
+	prefixedStringSplit := &ir.CorrelatedPair{
+		Old: &ir.SemanticBlock{Source: `auto s=u8"abc";`},
+		New: &ir.SemanticBlock{Source: `auto s=u8 "abc";`},
+	}
+	if isWhitespaceOnlyMatchForLanguages(prefixedStringSplit, "cpp", "cpp") {
+		t.Error("splitting a C++ string prefix from its quote must be semantic")
+	}
+	literalSuffixSplit := &ir.CorrelatedPair{
+		Old: &ir.SemanticBlock{Source: `auto s=R"(abc)"sv;`},
+		New: &ir.SemanticBlock{Source: `auto s=R"(abc)" sv;`},
+	}
+	if isWhitespaceOnlyMatchForLanguages(literalSuffixSplit, "cpp", "cpp") {
+		t.Error("splitting a C++ literal suffix from its string must be semantic")
+	}
+	for _, prefix := range []string{"R", "u8R", "uR", "UR", "LR"} {
+		t.Run("raw prefix "+prefix, func(t *testing.T) {
+			prefixedSpacing := &ir.CorrelatedPair{
+				Old: &ir.SemanticBlock{Source: fmt.Sprintf(`auto s=%s"(a " b)";`, prefix)},
+				New: &ir.SemanticBlock{Source: fmt.Sprintf(`auto s = %s"(a " b)";`, prefix)},
+			}
+			if !isWhitespaceOnlyMatchForLanguages(prefixedSpacing, "cpp", "cpp") {
+				t.Errorf("spacing around %s C++ raw literal must be formatting", prefix)
+			}
+		})
+	}
+	// Splitting a C++ punctuator is semantic; spacing around it is not.
+	for _, tc := range []struct {
+		name       string
+		old, new   string
+		wantFormat bool
+	}{
+		{name: "spaceship split", old: "a <=> b", new: "a <= > b"},
+		{name: "member-pointer split", old: "a->*b", new: "a -> * b"},
+		{name: "dot-member split", old: "a.*b", new: "a . * b"},
+		{name: "spaceship spacing", old: "a<=>b", new: "a <=> b", wantFormat: true},
+		{name: "member-pointer spacing", old: "a->*b", new: "a ->* b", wantFormat: true},
+		{name: "digraph split", old: "a<:b:>", new: "a < : b : >"},
+		{name: "digraph spacing", old: "a<:b:>", new: "a <: b :>", wantFormat: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &ir.CorrelatedPair{
+				Old: &ir.SemanticBlock{Source: tc.old},
+				New: &ir.SemanticBlock{Source: tc.new},
+			}
+			if got := isWhitespaceOnlyMatchForLanguages(p, "cpp", "cpp"); got != tc.wantFormat {
+				t.Errorf("%q -> %q whitespace=%v, want %v", tc.old, tc.new, got, tc.wantFormat)
+			}
+		})
+	}
+	macroSpacing := &ir.CorrelatedPair{
+		Old: &ir.SemanticBlock{Source: "#define CAT(a,b) a##b"},
+		New: &ir.SemanticBlock{Source: "#define CAT(a, b) a ## b"},
+	}
+	if !isWhitespaceOnlyMatchForLanguages(macroSpacing, "cpp", "cpp") {
+		t.Error("spacing around the C++ preprocessor ## operator must be formatting")
+	}
+	macroSplit := &ir.CorrelatedPair{
+		Old: &ir.SemanticBlock{Source: "#define CAT(a,b) a##b"},
+		New: &ir.SemanticBlock{Source: "#define CAT(a,b) a# #b"},
+	}
+	if isWhitespaceOnlyMatchForLanguages(macroSplit, "cpp", "cpp") {
+		t.Error("splitting the C++ preprocessor ## operator must be semantic")
+	}
+	preprocessorHashSpacing := &ir.CorrelatedPair{
+		Old: &ir.SemanticBlock{Source: "# define VALUE 1"},
+		New: &ir.SemanticBlock{Source: "#  define VALUE 1"},
+	}
+	if !isWhitespaceOnlyMatchForLanguages(preprocessorHashSpacing, "cpp", "cpp") {
+		t.Error("spacing after a C++ preprocessor # must be formatting")
+	}
+	// Indentation-only changes in C/C++ are formatting (no template/raw-string involvement).
+	indentPair := &ir.CorrelatedPair{
+		Old: &ir.SemanticBlock{Source: "int x = 1;"},
+		New: &ir.SemanticBlock{Source: "  int x = 1;"},
+	}
+	if !isWhitespaceOnlyMatchForLanguages(indentPair, "c", "c") {
+		t.Error("indentation-only change in C must be whitespace")
+	}
+	if !isWhitespaceOnlyMatchForLanguages(indentPair, "cpp", "cpp") {
+		t.Error("indentation-only change in C++ must be whitespace")
+	}
+	// C/C++ backticks are punctuation, never JS templates.
+	backtickAdd := &ir.CorrelatedPair{
+		Old: &ir.SemanticBlock{Source: "int a = 1;"},
+		New: &ir.SemanticBlock{Source: "int a = `1;"},
+	}
+	if isWhitespaceOnlyMatchForLanguages(backtickAdd, "c", "c") {
+		t.Error("a stray backtick in C is a token change, not whitespace")
+	}
+	if isWhitespaceOnlyMatchForLanguages(backtickAdd, "cpp", "cpp") {
+		t.Error("a stray backtick in C++ is a token change, not whitespace")
+	}
 }
 
+// TestSummary_WhitespaceClassificationLexical checks the summary counters.
 func TestSummary_WhitespaceClassificationLexical(t *testing.T) {
 	mkPair := func(oldSrc, newSrc string) ir.CorrelatedPair {
 		return ir.CorrelatedPair{

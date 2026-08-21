@@ -91,6 +91,27 @@ func TestMatchBlocks_SameBodyDifferentName(t *testing.T) {
 	}
 }
 
+func TestMatchBlocks_NamespaceChildrenPairAcrossLanguages(t *testing.T) {
+	// Namespace transparency lets this C++ lambda pair with a JS arrow.
+	oldNS := ir.SemanticBlock{ID: "namespace:app:0", Kind: ir.KindNamespace, Name: "app", Source: "namespace app {}"}
+	old := []ir.SemanticBlock{
+		oldNS,
+		{Kind: ir.KindLambda, Name: "handler", Parent: "namespace:app:0", Source: "auto handler = [](int a) { return a > 0; };"},
+	}
+	new := []ir.SemanticBlock{
+		{Kind: ir.KindArrowFunc, Name: "handler", Source: "export const handler = (a) => a > 0;"},
+	}
+
+	pairs, _, _ := MatchBlocks(old, new, SimilarityThreshold)
+
+	if len(pairs) != 1 {
+		t.Fatalf("expected 1 converted pair, got %d", len(pairs))
+	}
+	if pairs[0].Old.Kind != ir.KindLambda || pairs[0].New.Kind != ir.KindArrowFunc {
+		t.Errorf("expected a C++ lambda → JS arrow pair, got %s → %s", pairs[0].Old.Kind, pairs[0].New.Kind)
+	}
+}
+
 func TestMatchBlocks_ClassToFunctionConversion(t *testing.T) {
 	// A class that became a function with similar content must be matched
 	// as a conversion, not reported as removed + added.
@@ -820,6 +841,33 @@ func TestMatchBlocks_CommentPairsWithCommentNotCode(t *testing.T) {
 	}
 }
 
+func TestMatchBlocks_IsolatedNamespaceAndConceptKinds(t *testing.T) {
+	cases := []struct {
+		name string
+		old  ir.SemanticBlock
+		new  ir.SemanticBlock
+	}{
+		{
+			name: "concept to alias",
+			old:  ir.SemanticBlock{Kind: ir.KindConcept, Name: "C", Source: "concept C = requires(int x) { x; };"},
+			new:  ir.SemanticBlock{Kind: ir.KindTypeAlias, Name: "C", Source: "using C = int;"},
+		},
+		{
+			name: "namespace to class",
+			old:  ir.SemanticBlock{Kind: ir.KindNamespace, Name: "C", Source: "namespace C { int x; }"},
+			new:  ir.SemanticBlock{Kind: ir.KindClass, Name: "C", Source: "class C { int x; };"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pairs, unmatchedOld, unmatchedNew := MatchBlocks([]ir.SemanticBlock{tc.old}, []ir.SemanticBlock{tc.new}, SimilarityThreshold)
+			if len(pairs) != 0 || len(unmatchedOld) != 1 || len(unmatchedNew) != 1 {
+				t.Fatalf("isolated kinds must remain removed+added: pairs=%+v old=%+v new=%+v", pairs, unmatchedOld, unmatchedNew)
+			}
+		})
+	}
+}
+
 func TestCompatible(t *testing.T) {
 	tests := []struct {
 		a, b     ir.BlockKind
@@ -828,6 +876,10 @@ func TestCompatible(t *testing.T) {
 		{ir.KindFunction, ir.KindFunction, true},
 		{ir.KindFunction, ir.KindMethod, true},
 		{ir.KindFunction, ir.KindArrowFunc, true},
+		{ir.KindLambda, ir.KindLambda, true},
+		{ir.KindLambda, ir.KindArrowFunc, true}, // C++ lambda → JS arrow code motion
+		{ir.KindLambda, ir.KindFunction, true},
+		{ir.KindLambda, ir.KindClass, false},
 		{ir.KindFunction, ir.KindClass, false},
 		{ir.KindConstant, ir.KindVariable, true},
 		{ir.KindImport, ir.KindImport, true},
@@ -838,6 +890,8 @@ func TestCompatible(t *testing.T) {
 		{ir.KindTemplate, ir.KindJSX, true}, // Lit element → JSX conversion
 		{ir.KindJSX, ir.KindTemplate, true},
 		{ir.KindTemplate, ir.KindFunction, false},
+		{ir.KindNamespace, ir.KindClass, false},
+		{ir.KindConcept, ir.KindTypeAlias, false},
 		{ir.KindJSX, ir.KindComment, false},
 		{ir.KindInterface, ir.KindInterface, true},
 		{ir.KindJSX, ir.KindJSX, true},

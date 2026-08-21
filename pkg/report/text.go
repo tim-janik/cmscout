@@ -49,6 +49,9 @@ type TextReporter struct {
 
 	// movedPairs: reordered pairs render and count as "Moved" even with --skip-unchanged.
 	movedPairs map[*ir.CorrelatedPair]bool
+
+	// classContainers indexes classes whose added or removed members render inline.
+	classContainers map[string]*ir.SemanticBlock
 }
 
 // isCompletelyUnchanged: identical source, name, position ⇒ no review signal; whole-file
@@ -111,6 +114,7 @@ func (r *TextReporter) Write(w io.Writer, result *ir.CorrelationResult, oldPath,
 	r.oldLineRanges = nil
 	r.newLineRanges = nil
 	r.movedPairs = nil
+	r.classContainers = nil
 
 	// The supplemental pair carries the raw inputs used for skip-unchanged byte-range bookkeeping.
 	for i := range result.Pairs {
@@ -144,6 +148,21 @@ func (r *TextReporter) Write(w io.Writer, result *ir.CorrelationResult, oldPath,
 	// Compute moved pairs: used by --skip-unchanged and the summary's Moved counter.
 	r.movedPairs = computeMovedPairs(result.Pairs)
 
+	// Index classes so one-sided members render inside their class.
+	r.classContainers = make(map[string]*ir.SemanticBlock)
+	for i := range result.Pairs {
+		p := &result.Pairs[i]
+		if p.Supplemental {
+			continue
+		}
+		if p.Old != nil && p.Old.Kind == ir.KindClass {
+			r.classContainers[p.Old.ID] = p.Old
+		}
+		if p.New != nil && p.New.Kind == ir.KindClass {
+			r.classContainers[p.New.ID] = p.New
+		}
+	}
+
 	// Ordered kinds for consistent output
 	// In summary-only mode, skip the detailed block listing entirely
 	if !r.Opts.SummaryOnly {
@@ -151,6 +170,10 @@ func (r *TextReporter) Write(w io.Writer, result *ir.CorrelationResult, oldPath,
 		// coverage invariant holds; de-dup prevents repeated lines.
 		for _, kind := range orderedKinds {
 			if len(groups[kind]) == 0 {
+				continue
+			}
+			// Namespaces are scope markers, not rendered components.
+			if kind == ir.KindNamespace {
 				continue
 			}
 			r.writeGroup(&b, c, kind, groups[kind])
@@ -165,6 +188,9 @@ func (r *TextReporter) Write(w io.Writer, result *ir.CorrelationResult, oldPath,
 		}
 		sort.Slice(extraKinds, func(i, j int) bool { return extraKinds[i] < extraKinds[j] })
 		for _, kind := range extraKinds {
+			if kind == ir.KindNamespace {
+				continue
+			}
 			r.writeGroup(&b, c, kind, groups[kind])
 		}
 	}
@@ -224,19 +250,56 @@ func (r *TextReporter) writePair(b *strings.Builder, c color, p *ir.CorrelatedPa
 	if r.Opts.SkipUnchanged && isCompletelyUnchanged(p, r.movedPairs[p]) {
 		return
 	}
+	// One-sided class members render only in the class diff.
+	if r.nestedInClassContainer(p) {
+		return
+	}
+
+	var pair strings.Builder
 	switch {
 	case p.IsAdded():
-		r.writePairHeader(b, c, p)
-		r.writeAdded(b, c, p)
+		r.writePairHeader(&pair, c, p)
+		r.writeAdded(&pair, c, p)
 	case p.IsRemoved():
-		r.writePairHeader(b, c, p)
-		r.writeRemoved(b, c, p)
+		r.writePairHeader(&pair, c, p)
+		r.writeRemoved(&pair, c, p)
 	default:
 		if p.Old != nil && p.New != nil {
-			r.writePairHeader(b, c, p)
-			r.writeMatched(b, c, p)
+			r.writePairHeader(&pair, c, p)
+			r.writeMatched(&pair, c, p)
 		}
 	}
+
+	// Drop pairs whose coverage de-duplication hid every source line.
+	rendered := pair.String()
+	keepHeader := p.InnerDiff == nil && !p.Supplemental
+	if keepHeader || (strings.Contains(rendered, "\n") && strings.TrimSpace(rendered[strings.IndexByte(rendered, '\n')+1:]) != "") {
+		b.WriteString(rendered)
+	}
+}
+
+// nestedInClassContainer reports whether a one-sided block belongs to a class.
+func (r *TextReporter) nestedInClassContainer(p *ir.CorrelatedPair) bool {
+	if p.Supplemental {
+		return false
+	}
+	var child *ir.SemanticBlock
+	switch {
+	case p.IsAdded():
+		child = p.New
+	case p.IsRemoved():
+		child = p.Old
+	default:
+		return false
+	}
+	if child == nil {
+		return false
+	}
+	parent := r.classContainers[child.Parent]
+	if parent == nil || parent.Span.EndByte <= parent.Span.StartByte {
+		return false
+	}
+	return parent.Span.StartByte <= child.Span.StartByte && child.Span.EndByte <= parent.Span.EndByte
 }
 
 // blockRange: 1-based start + count for the @@ header; synthetic/zero-span blocks fall back to line count; nil ⇒ 0,0.
@@ -257,6 +320,25 @@ func blockRange(b *ir.SemanticBlock) (start, count int) {
 	return 1, n
 }
 
+// scopeTag formats a C/C++ namespace or class annotation.
+func scopeTag(p *ir.CorrelatedPair) string {
+	var scope string
+	switch {
+	case p.IsAdded():
+		scope = p.New.Scope
+	case p.IsRemoved():
+		scope = p.Old.Scope
+	default:
+		if p.New != nil {
+			scope = p.New.Scope
+		}
+	}
+	if scope == "" {
+		return ""
+	}
+	return fmt.Sprintf("  [in %s]", scope)
+}
+
 // writePairHeader: git-style @@ range + name + similarity or [added]/[removed],
 // with [converted]/[moved]/[whitespace] tags for matched pairs.
 func (r *TextReporter) writePairHeader(b *strings.Builder, c color, p *ir.CorrelatedPair) {
@@ -270,13 +352,13 @@ func (r *TextReporter) writePairHeader(b *strings.Builder, c color, p *ir.Correl
 		if name == "" {
 			name = string(p.New.Kind)
 		}
-		b.WriteString(fmt.Sprintf("  %s  %s  %s[added]%s\n", hunk, name, c.green, c.reset))
+		b.WriteString(fmt.Sprintf("  %s  %s%s  %s[added]%s\n", hunk, name, scopeTag(p), c.green, c.reset))
 	case p.IsRemoved():
 		name := p.Old.Name
 		if name == "" {
 			name = string(p.Old.Kind)
 		}
-		b.WriteString(fmt.Sprintf("  %s  %s  %s[removed]%s\n", hunk, name, c.red, c.reset))
+		b.WriteString(fmt.Sprintf("  %s  %s%s  %s[removed]%s\n", hunk, name, scopeTag(p), c.red, c.reset))
 	default:
 		oldName := p.Old.Name
 		newName := p.New.Name
@@ -300,8 +382,8 @@ func (r *TextReporter) writePairHeader(b *strings.Builder, c color, p *ir.Correl
 			tags = append(tags, "[whitespace]")
 		}
 		sim := similarityFor(p)
-		b.WriteString(fmt.Sprintf("  %s  %s  %s%.0f%% similarity%s",
-			hunk, label, c.cyan, sim, c.reset))
+		b.WriteString(fmt.Sprintf("  %s  %s%s  %s%.0f%% similarity%s",
+			hunk, label, scopeTag(p), c.cyan, sim, c.reset))
 		// Tags use yellow: gray is reserved for the @@ range, green/red for one-sided pairs.
 		for _, tag := range tags {
 			b.WriteString(fmt.Sprintf("  %s%s%s", c.yellow, tag, c.reset))
@@ -588,24 +670,28 @@ func containsKind(kinds []ir.BlockKind, want ir.BlockKind) bool {
 
 // kindHeaders maps block kinds to their section headers.
 var kindHeaders = map[ir.BlockKind]string{
-	ir.KindImport:       "Imports",
-	ir.KindExport:       "Exports",
-	ir.KindConstant:     "Constants",
-	ir.KindVariable:     "Variables",
-	ir.KindFunction:     "Functions",
-	ir.KindMethod:       "Methods",
-	ir.KindArrowFunc:    "Arrow Functions",
-	ir.KindClass:        "Classes",
-	ir.KindInterface:    "Interfaces",
-	ir.KindTypeAlias:    "Type Aliases",
-	ir.KindEnum:         "Enums",
-	ir.KindObjectMethod: "Object Methods",
-	ir.KindJSX:          "JSX",
-	ir.KindTemplate:     "Templates",
-	ir.KindComment:      "Comments",
-	ir.KindDecorator:    "Decorators",
-	ir.KindLifecycle:    "Lifecycle",
-	ir.KindUnknown:      "Other",
+	ir.KindImport:        "Imports",
+	ir.KindExport:        "Exports",
+	ir.KindConstant:      "Constants",
+	ir.KindVariable:      "Variables",
+	ir.KindFunction:      "Functions",
+	ir.KindMacroFunction: "Macro Functions",
+	ir.KindMethod:        "Methods",
+	ir.KindArrowFunc:     "Arrow Functions",
+	ir.KindLambda:        "Lambdas",
+	ir.KindClass:         "Classes",
+	ir.KindNamespace:     "Namespaces",
+	ir.KindInterface:     "Interfaces",
+	ir.KindTypeAlias:     "Type Aliases",
+	ir.KindConcept:       "Concepts",
+	ir.KindEnum:          "Enums",
+	ir.KindObjectMethod:  "Object Methods",
+	ir.KindJSX:           "JSX",
+	ir.KindTemplate:      "Templates",
+	ir.KindComment:       "Comments",
+	ir.KindDecorator:     "Decorators",
+	ir.KindLifecycle:     "Lifecycle",
+	ir.KindUnknown:       "Other",
 }
 
 // orderedKinds lists kinds in their canonical output order.
@@ -616,10 +702,13 @@ var orderedKinds = []ir.BlockKind{
 	ir.KindClass,
 	ir.KindInterface,
 	ir.KindTypeAlias,
+	ir.KindConcept,
 	ir.KindEnum,
 	ir.KindFunction,
+	ir.KindMacroFunction,
 	ir.KindMethod,
 	ir.KindArrowFunc,
+	ir.KindLambda,
 	ir.KindObjectMethod,
 	ir.KindLifecycle,
 	ir.KindJSX,

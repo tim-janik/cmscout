@@ -78,6 +78,9 @@ func CollapseMatchedSubBlocks(result *ir.CorrelationResult) {
 	}
 	for i := range result.Pairs {
 		p := &result.Pairs[i]
+		if p.Old != nil && p.Old.Kind == ir.KindNamespace {
+			continue // namespaces are a space, not a component: nothing collapses into them
+		}
 
 		// Matched parents are collapsed too: children must not re-print inside the parent blob.
 		if p.Old != nil && p.New != nil {
@@ -179,18 +182,32 @@ func collapseChildren(
 		relStart := child.Span.StartByte - parentStart
 		relEnd := child.Span.EndByte - parentStart
 
-		// Bounds sanity checks (uint underflow is caught by relStart >= relEnd).
-		if relEnd > uint(len(src)) || relStart >= relEnd {
-			continue
-		}
-
 		// Use the canonical (new-side) reference so both sides collapse identically.
 		kn := kindName{child.Kind, child.Name}
 		if canonical, ok := canonicalRef[child.ID]; ok {
 			kn = canonical
 		}
+		ref := fmt.Sprintf("// [matched: %s %s]", kn.kind, displayName(kn.name))
 
-		// Expand the span over immediately-preceding comments (whitespace gap only).
+		// Bounds sanity checks (uint underflow is caught by relStart >= relEnd).
+		if relStart >= relEnd {
+			continue
+		}
+		// Out-of-class members are rendered by their own method pair.
+		if relEnd > uint(len(src)) {
+			continue
+		}
+
+		// Fold only spans that start at the first content of their line.
+		lineStart := relStart
+		for lineStart > 0 && src[lineStart-1] != '\n' {
+			lineStart--
+		}
+		if !isOnlyWhitespace(src[lineStart:relStart]) {
+			continue
+		}
+
+		// Expand only own-line prefix comments, never trailing comments.
 		expandedStart := relStart
 		for _, cmt := range commentChildren {
 			// Reject comments outside the parent before subtracting (unsigned underflow guard).
@@ -202,7 +219,15 @@ func collapseChildren(
 			if cmtRelStart > uint(len(src)) || cmtRelEnd > uint(len(src)) {
 				continue
 			}
-			// Only comments ending right before the child (whitespace gap) are folded in.
+			// Leave trailing comments in source.
+			cmtLineStart := cmtRelStart
+			for cmtLineStart > 0 && src[cmtLineStart-1] != '\n' {
+				cmtLineStart--
+			}
+			if !isOnlyWhitespace(src[cmtLineStart:cmtRelStart]) {
+				continue
+			}
+			// Only own-line comments ending right before the child (whitespace gap) are folded in.
 			if cmtRelEnd <= relStart && cmtRelEnd <= expandedStart {
 				gapStart := cmtRelEnd
 				gapEnd := expandedStart
@@ -213,13 +238,32 @@ func collapseChildren(
 			}
 		}
 
-		ref := fmt.Sprintf("// [matched: %s %s]", kn.kind, displayName(kn.name))
+		// Fold a trailing same-line comment so the reference stays standalone.
+		relLineEnd := relEnd
+		for relLineEnd < uint(len(src)) && src[relLineEnd] != '\n' {
+			relLineEnd++
+		}
+		for _, cmt := range commentChildren {
+			if cmt.Span.StartByte < parentStart || cmt.Span.EndByte < parentStart {
+				continue
+			}
+			crs := cmt.Span.StartByte - parentStart
+			cre := cmt.Span.EndByte - parentStart
+			if crs > uint(len(src)) || cre > uint(len(src)) {
+				continue
+			}
+			if crs >= relEnd && crs < relLineEnd && cre <= relLineEnd {
+				relEnd = cre
+				consumedComments[cmt.ID] = struct{}{}
+				break
+			}
+		}
+
 		src = src[:expandedStart] + ref + src[relEnd:]
 	}
 
 	// Post-process: absorb comment-only lines preceding reference lines (call-wrapper cases).
 	src, absorbed := absorbPrefixComments(src)
-
 	// Combine consumed comments: exact block IDs (span expansion) + trimmed texts (post-processing).
 	var allAbsorbed []absorption
 	for id := range consumedComments {

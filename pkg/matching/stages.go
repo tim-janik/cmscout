@@ -9,6 +9,19 @@ import (
 	"cmdiff/pkg/ir"
 )
 
+// isRootLevel treats namespace members as top-level matching candidates.
+func isRootLevel(b *ir.SemanticBlock, byID map[string]*ir.SemanticBlock) bool {
+	id := b.Parent
+	for id != "" {
+		parent := byID[id]
+		if parent == nil || parent.Kind != ir.KindNamespace {
+			return false
+		}
+		id = parent.Parent
+	}
+	return true
+}
+
 // MatchBlocks: exact name, exact comments, then distance stages (top-level containers,
 // recursive hierarchical children, scope-restricted residual, comment-only table).
 func MatchBlocks(oldBlocks, newBlocks []ir.SemanticBlock, threshold float64) ([]ir.CorrelatedPair, []*ir.SemanticBlock, []*ir.SemanticBlock) {
@@ -90,12 +103,12 @@ func MatchBlocks(oldBlocks, newBlocks []ir.SemanticBlock, threshold float64) ([]
 
 	var topOld, topNew []*ir.SemanticBlock
 	for _, b := range codeOld {
-		if b.Parent == "" {
+		if isRootLevel(b, oldByID) {
 			topOld = append(topOld, b)
 		}
 	}
 	for _, b := range codeNew {
-		if b.Parent == "" {
+		if isRootLevel(b, newByID) {
 			topNew = append(topNew, b)
 		}
 	}

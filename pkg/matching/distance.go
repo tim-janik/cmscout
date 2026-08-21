@@ -230,7 +230,7 @@ func bodySimilarity(a, b string) float64 {
 	return 1.0 - float64(d)/float64(maxLen)
 }
 
-// kindSimilarity: same kind 1.0, compatible 0.6, different 0.3 — never blocks a match.
+// kindSimilarity scores same-kind, compatible, and other eligible pairs.
 func kindSimilarity(a, b ir.BlockKind) float64 {
 	if a == b {
 		return 1.0
@@ -298,6 +298,15 @@ func displayNameSimilarity(a, b string) float64 {
 	return nameSimilarity(a, b)
 }
 
+// kindPairEligible isolates concepts and namespaces from other kinds.
+func kindPairEligible(a, b ir.BlockKind) bool {
+	if a == b {
+		return true
+	}
+	return a != ir.KindNamespace && b != ir.KindNamespace &&
+		a != ir.KindConcept && b != ir.KindConcept
+}
+
 // Compatible: same kind, callable↔callable, value↔value, and JSX↔Lit template elements.
 func Compatible(a, b ir.BlockKind) bool {
 	if a == b {
@@ -319,7 +328,8 @@ func isElement(kind ir.BlockKind) bool {
 
 func isCallable(kind ir.BlockKind) bool {
 	switch kind {
-	case ir.KindFunction, ir.KindArrowFunc, ir.KindMethod, ir.KindObjectMethod, ir.KindLifecycle:
+	case ir.KindFunction, ir.KindArrowFunc, ir.KindMethod, ir.KindObjectMethod,
+		ir.KindLifecycle, ir.KindMacroFunction, ir.KindLambda:
 		return true
 	default:
 		return false

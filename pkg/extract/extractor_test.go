@@ -4,6 +4,7 @@ package extract
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"cmdiff/pkg/ir"
@@ -293,6 +294,34 @@ func TestExtract_ArrowFunctionNoDuplicate(t *testing.T) {
 
 	if len(km["arrow_function"]) != 1 || km["arrow_function"][0] != "f" {
 		t.Errorf("expected exactly one arrow_function block named f, got %v", km["arrow_function"])
+	}
+}
+
+// TestExtract_ArrowFunctionBodyLocal keeps function-local arrows inline.
+func TestExtract_ArrowFunctionBodyLocal(t *testing.T) {
+	src := `function spin() {
+  x = [1, 2].map(a => { return a + 1; });
+}
+class A {
+  f = () => { return 2; };
+}
+export default () => { return 4; };
+`
+	blocks := extractFull(t, src)
+	km := kinds(blocks)
+
+	// The map callback is function-local: no arrow block for it.
+	if len(km["arrow_function"]) != 2 {
+		t.Fatalf("expected only the class-field and module arrows, got %v", km["arrow_function"])
+	}
+	// One anonymous arrow (class field f) and one anonymous arrow (export default).
+	for _, n := range km["arrow_function"] {
+		if n != "" {
+			t.Errorf("class-field and bare module arrows must be anonymous, got %q", n)
+		}
+	}
+	if len(km["function"]) != 1 || km["function"][0] != "spin" {
+		t.Errorf("expected function spin, got %v", km["function"])
 	}
 }
 
@@ -646,5 +675,798 @@ func TestExtract_SourcePreserved(t *testing.T) {
 			}
 			t.Logf("block source: %q", b.Source)
 		}
+	}
+}
+
+// extractLangBlocks extracts all blocks from source in the given language,
+// optionally with SeparateMacroFunctions set (C/C++ function-like macros).
+func extractLangBlocks(t *testing.T, name, src string, separateMacros bool) []ir.SemanticBlock {
+	t.Helper()
+	langCode := lang.Language{Name: name, Ext: "." + name}
+	p, err := parser.New(langCode)
+	if err != nil {
+		t.Skipf("parser not available for %q: %v", name, err)
+	}
+	defer p.Close()
+	ast, err := p.Parse(context.Background(), []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ast.Close()
+	doc, err := NewWithOptions("test."+name, Options{SeparateMacroFunctions: separateMacros}).Extract(ast)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return doc.Blocks
+}
+
+func extractCBlocks(t *testing.T, src string) []ir.SemanticBlock {
+	return extractLangBlocks(t, "c", src, false)
+}
+
+func extractCppBlocks(t *testing.T, src string) []ir.SemanticBlock {
+	return extractLangBlocks(t, "cpp", src, false)
+}
+
+// TestExtract_CFunction: function definitions resolve their name through
+// pointer declarator chains (int *foo(void)) and plain declarators.
+func TestExtract_CFunction(t *testing.T) {
+	src := "int *foo(void) { return 0; }\nvoid bar(int *p) {}\n"
+	blocks := extractCBlocks(t, src)
+	km := kinds(blocks)
+	if len(km["function"]) != 2 {
+		t.Fatalf("expected 2 function blocks, got %v", km["function"])
+	}
+	for _, b := range blocks {
+		if b.Kind == ir.KindFunction && b.Name == "foo" && b.Source != "int *foo(void) { return 0; }" {
+			t.Errorf("foo source must be the full definition, got %q", b.Source)
+		}
+	}
+}
+
+// TestExtract_CStruct: a standalone struct specifier is a class block.
+func TestExtract_CStruct(t *testing.T) {
+	src := "struct Point { int x; int y; };\n"
+	blocks := extractCBlocks(t, src)
+	km := kinds(blocks)
+	if len(km["class"]) != 1 || km["class"][0] != "Point" {
+		t.Errorf("expected one class block 'Point', got %v", km["class"])
+	}
+}
+
+// TestExtract_CEnum: an enum specifier is an enum block.
+func TestExtract_CEnum(t *testing.T) {
+	src := "enum Color { RED, RED2 };\n"
+	blocks := extractCBlocks(t, src)
+	km := kinds(blocks)
+	if len(km["enum"]) != 1 || km["enum"][0] != "Color" {
+		t.Errorf("expected one enum block 'Color', got %v", km["enum"])
+	}
+}
+
+// TestExtract_CTypedef: a typedef name is the terminal of the declarator
+// chain, including function-pointer typedefs (typedef int (*handler_t)(int);).
+func TestExtract_CTypedef(t *testing.T) {
+	src := "typedef int (*handler_t)(int);\ntypedef int int32_t;\n"
+	blocks := extractCBlocks(t, src)
+	km := kinds(blocks)
+	if len(km["type_alias"]) != 2 {
+		t.Fatalf("expected 2 type_alias blocks, got %v", km["type_alias"])
+	}
+	want := map[string]bool{"handler_t": true, "int32_t": true}
+	for _, n := range km["type_alias"] {
+		if !want[n] {
+			t.Errorf("unexpected typedef name %q", n)
+		}
+	}
+	// A typedef of a struct must NOT also emit a class block (no double extraction).
+	src2 := "typedef struct Point { int x; int y; } Point;\n"
+	if km2 := kinds(extractCBlocks(t, src2)); len(km2["class"]) != 0 {
+		t.Errorf("typedef-of-struct must not double-extract a class block, got %v", km2["class"])
+	}
+}
+
+// TestExtract_CInclude: preprocessor includes are import blocks named by the path.
+func TestExtract_CInclude(t *testing.T) {
+	src := "#include <stdio.h>\n#include \"foo.h\"\n"
+	blocks := extractCBlocks(t, src)
+	km := kinds(blocks)
+	if len(km["import"]) != 2 {
+		t.Fatalf("expected 2 import blocks, got %v", km["import"])
+	}
+}
+
+func TestExtract_CPreprocessorSpanExcludesLineEnding(t *testing.T) {
+	src := "#include <stdio.h>\n#define VALUE 1\n#define ADD(x) (x)\n"
+	blocks := extractCBlocks(t, src)
+	if len(blocks) != 3 {
+		t.Fatalf("expected three preprocessor blocks, got %+v", blocks)
+	}
+	for _, block := range blocks {
+		if strings.HasSuffix(block.Source, "\n") || strings.HasSuffix(block.Source, "\r") {
+			t.Errorf("%s source must not include the directive line ending: %q", block.Name, block.Source)
+		}
+		if got := src[block.Span.StartByte:block.Span.EndByte]; got != block.Source {
+			t.Errorf("%s span/source mismatch: %q vs %q", block.Name, got, block.Source)
+		}
+		if block.Span.StartLine != block.Span.EndLine {
+			t.Errorf("one-line directive %s has an overlong line span: %+v", block.Name, block.Span)
+		}
+	}
+}
+
+// TestExtract_CFileScopeVariable checks declaration spans and grouping.
+func TestExtract_CFileScopeVariable(t *testing.T) {
+	src := "const int G = 5;\nint counter = 0, total = 0;\n"
+	blocks := extractCBlocks(t, src)
+	km := kinds(blocks)
+	if len(km["constant"]) != 1 || km["constant"][0] != "G" {
+		t.Fatalf("expected one constant 'G', got %v", km["constant"])
+	}
+	if len(km["variable"]) != 2 {
+		t.Fatalf("expected 2 variables (counter, total), got %v", km["variable"])
+	}
+	var g, counter, total *ir.SemanticBlock
+	for i := range blocks {
+		switch blocks[i].Name {
+		case "G":
+			g = &blocks[i]
+		case "counter":
+			counter = &blocks[i]
+		case "total":
+			total = &blocks[i]
+		}
+	}
+	if g == nil || counter == nil || total == nil {
+		t.Fatalf("missing blocks: g=%v counter=%v total=%v", g, counter, total)
+	}
+	// Sole declarator: full declaration including the ';'.
+	if g.Source != "const int G = 5;" {
+		t.Errorf("constant G must cover the full declaration, got %q", g.Source)
+	}
+	if got := src[g.Span.StartByte:g.Span.EndByte]; got != g.Source {
+		t.Errorf("G span must match source: %q vs %q", got, g.Source)
+	}
+	// Grouped declarators: non-overlapping, per-declarator spans.
+	if counter.Span.EndByte > total.Span.StartByte {
+		t.Errorf("grouped declarator spans must not overlap: counter %d-%d, total %d-%d",
+			counter.Span.StartByte, counter.Span.EndByte, total.Span.StartByte, total.Span.EndByte)
+	}
+	for _, b := range []*ir.SemanticBlock{counter, total} {
+		if got := src[b.Span.StartByte:b.Span.EndByte]; got != b.Source {
+			t.Errorf("span must match source for %q: %q vs %q", b.Name, got, b.Source)
+		}
+	}
+}
+
+// TestExtract_CFunctionLocalDeclarations: init_declarators inside a function
+// body are locals and must not be extracted (scope guard).
+func TestExtract_CFunctionLocalDeclarations(t *testing.T) {
+	src := "int top = 1;\nint main(void) {\n  int local = 2;\n  const int c = 3;\n  return local;\n}\n"
+	blocks := extractCBlocks(t, src)
+	km := kinds(blocks)
+	if len(km["variable"]) != 1 || km["variable"][0] != "top" {
+		t.Errorf("expected only the file-scope variable 'top', got %v", km["variable"])
+	}
+	if len(km["constant"]) != 0 {
+		t.Errorf("function-local const must not be extracted, got %v", km["constant"])
+	}
+	if len(km["function"]) != 1 || km["function"][0] != "main" {
+		t.Errorf("expected function 'main', got %v", km["function"])
+	}
+}
+
+// TestExtract_CMacroFunction: a function-like macro emits KindFunction by
+// default and KindMacroFunction when SeparateMacroFunctions is set.
+func TestExtract_CMacroFunction(t *testing.T) {
+	src := "#define ADD(a, b) ((a) + (b))\n"
+	if km := kinds(extractLangBlocks(t, "c", src, false)); len(km["function"]) != 1 || km["function"][0] != "ADD" {
+		t.Errorf("separate=false: expected function 'ADD', got %v", km["function"])
+	}
+	if km := kinds(extractLangBlocks(t, "c", src, true)); len(km["macro_function"]) != 1 || km["macro_function"][0] != "ADD" {
+		t.Errorf("separate=true: expected macro_function 'ADD', got %v", km["macro_function"])
+	}
+}
+
+// TestExtract_CppClassAndMethods: a class is a class block; ctor, dtor, and
+// methods defined inside it are method blocks.
+func TestExtract_CppClassAndMethods(t *testing.T) {
+	src := "class Widget {\n public:\n  Widget() {}\n  ~Widget() {}\n  int value() const { return 0; }\n};\n"
+	blocks := extractCppBlocks(t, src)
+	km := kinds(blocks)
+	if len(km["class"]) != 1 || km["class"][0] != "Widget" {
+		t.Errorf("expected one class 'Widget', got %v", km["class"])
+	}
+	if len(km["method"]) != 3 {
+		t.Fatalf("expected 3 methods (ctor, dtor, value), got %v", km["method"])
+	}
+	want := map[string]bool{"Widget": true, "~Widget": true, "value": true}
+	for _, n := range km["method"] {
+		if !want[n] {
+			t.Errorf("unexpected method %q", n)
+		}
+	}
+}
+
+// TestExtract_CppNamespace: named and anonymous namespaces are namespace blocks.
+func TestExtract_CppNamespace(t *testing.T) {
+	src := "namespace app { void f() {} }\nnamespace { void anon() {} }\n"
+	blocks := extractCppBlocks(t, src)
+	km := kinds(blocks)
+	if len(km["namespace"]) != 2 {
+		t.Fatalf("expected 2 namespace blocks, got %v", km["namespace"])
+	}
+	// One named 'app', one anonymous ("").
+	names := map[string]int{}
+	for _, n := range km["namespace"] {
+		names[n]++
+	}
+	if names["app"] != 1 || names[""] != 1 {
+		t.Errorf("expected namespaces 'app' and '', got %v", names)
+	}
+}
+
+// TestExtract_CppTemplateFunction: a template_declaration wraps the function
+// definition; the function is extracted once with its real name (no duplicate).
+func TestExtract_CppTemplateFunction(t *testing.T) {
+	src := "template <typename T>\nT add(T a, T b) { return a + b; }\n"
+	blocks := extractCppBlocks(t, src)
+	km := kinds(blocks)
+	if len(km["function"]) != 1 || km["function"][0] != "add" {
+		t.Errorf("expected one function 'add', got %v", km["function"])
+	}
+	if len(blocks) != 1 || blocks[0].Source != "template <typename T>\nT add(T a, T b) { return a + b; }" {
+		t.Errorf("template header must belong to the function block, got %+v", blocks)
+	}
+}
+
+func TestExtract_CppTemplateMethodsAndDeclarations(t *testing.T) {
+	src := `class C {
+ public:
+  void declared();
+  virtual int pure() = 0;
+  template<class T> void templated(T) {}
+};
+template<class T> void C::out(T) {}
+void C::declared() {}
+`
+	blocks := extractCppBlocks(t, src)
+	var names []string
+	for _, block := range blocks {
+		if block.Kind == ir.KindMethod {
+			names = append(names, block.Name)
+			if block.Name == "templated" && !strings.HasPrefix(block.Source, "template<class T>") {
+				t.Errorf("templated method must include its template header, got %q", block.Source)
+			}
+			if block.Name == "out" && block.Parent == "" {
+				t.Errorf("out-of-class method must have a class parent: %+v", block)
+			}
+		}
+	}
+	want := map[string]int{"declared": 2, "pure": 1, "templated": 1, "out": 1}
+	got := map[string]int{}
+	for _, name := range names {
+		got[name]++
+	}
+	if len(got) != len(want) {
+		t.Fatalf("method names: got %+v, want %+v (all blocks=%+v)", got, want, blocks)
+	}
+	for name, count := range want {
+		if got[name] != count {
+			t.Errorf("method %q: got %d, want %d (all=%+v)", name, got[name], count, got)
+		}
+	}
+}
+
+// TestExtract_CppTemplateMethodDeclaration keeps the template header in the block.
+func TestExtract_CppTemplateMethodDeclaration(t *testing.T) {
+	src := `class Loop {
+ public:
+  template<IsLoopCallback Func>
+  void add(Func&& func);
+};
+`
+	blocks := extractCppBlocks(t, src)
+	found := false
+	for _, block := range blocks {
+		if block.Kind == ir.KindMethod && block.Name == "add" {
+			found = true
+			if !strings.HasPrefix(block.Source, "template<") {
+				t.Errorf("template method declaration must include its template header, got %q", block.Source)
+			}
+			if start := strings.Index(block.Source, "void add"); start <= 0 {
+				t.Errorf("template header must precede the declaration, got %q", block.Source)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected method add, blocks=%+v", blocks)
+	}
+}
+
+func TestExtract_CppOperatorAndSpecializationNames(t *testing.T) {
+	src := `class C {
+ public:
+  C& operator=(const C&);
+  operator bool() const;
+  void operator()();
+};
+C::operator bool() const { return true; }
+template<> void f<int>() {}
+`
+	blocks := extractCppBlocks(t, src)
+	got := map[string]ir.BlockKind{}
+	for _, block := range blocks {
+		got[block.Name] = block.Kind
+	}
+	want := map[string]ir.BlockKind{
+		"operator=":     ir.KindMethod,
+		"operator bool": ir.KindMethod,
+		"operator()":    ir.KindMethod,
+		"f<int>":        ir.KindFunction,
+	}
+	for name, kind := range want {
+		if got[name] != kind {
+			t.Errorf("%q: got %q, want %q (all=%+v)", name, got[name], kind, got)
+		}
+	}
+}
+
+func TestExtract_CppFriendFunctionsStayFree(t *testing.T) {
+	src := `class C {
+ public:
+  friend void f();
+};
+void f() {}
+`
+	blocks := extractCppBlocks(t, src)
+	for _, block := range blocks {
+		if block.Kind == ir.KindFunction && block.Name == "f" {
+			if block.Scope != "" || block.Parent != "" {
+				t.Errorf("friend function must not inherit class scope: %+v", block)
+			}
+			return
+		}
+	}
+	t.Fatalf("missing friend function block: %+v", blocks)
+}
+
+func TestExtract_CppQualifiedMethodsUseFullScope(t *testing.T) {
+	src := `namespace A { class C { void f(); }; }
+namespace B { class C { void f(); }; }
+namespace A { void C::f() {} }
+void B::C::f() {}
+`
+	blocks := extractCppBlocks(t, src)
+	var methods []ir.SemanticBlock
+	for _, block := range blocks {
+		if block.Kind == ir.KindMethod && block.Name == "f" {
+			methods = append(methods, block)
+		}
+	}
+	if len(methods) != 4 {
+		t.Fatalf("expected four C::f method blocks, got %+v", methods)
+	}
+	seen := map[string]int{}
+	for _, method := range methods {
+		seen[method.Scope]++
+		if method.Parent == "" {
+			t.Errorf("qualified method must have a class parent: %+v", method)
+		}
+	}
+	if seen["A::C"] != 2 || seen["B::C"] != 2 {
+		t.Errorf("qualified methods must resolve to their namespace-specific classes, got %v", seen)
+	}
+}
+
+func TestExtract_CppLocalTypesNotExtracted(t *testing.T) {
+	src := `void f() {
+  class Local { void m() {} };
+  struct S { int x; };
+  enum E { A };
+}
+`
+	blocks := extractCppBlocks(t, src)
+	km := kinds(blocks)
+	if len(km["function"]) != 1 || km["function"][0] != "f" {
+		t.Errorf("expected only enclosing function, got functions=%v", km["function"])
+	}
+	for _, kind := range []string{"class", "method", "enum", "namespace"} {
+		if len(km[kind]) != 0 {
+			t.Errorf("local %s declarations must not escape the enclosing function: %v", kind, km[kind])
+		}
+	}
+}
+
+func TestExtract_CLocalTypesNotExtracted(t *testing.T) {
+	src := `void f(void) {
+  struct Local { int x; };
+  enum E { A };
+  union U { int y; };
+}
+`
+	blocks := extractCBlocks(t, src)
+	km := kinds(blocks)
+	if len(km["function"]) != 1 || km["function"][0] != "f" {
+		t.Errorf("expected only enclosing function, got functions=%v", km["function"])
+	}
+	for _, kind := range []string{"class", "enum"} {
+		if len(km[kind]) != 0 {
+			t.Errorf("local %s declarations must not escape the enclosing function: %v", kind, km[kind])
+		}
+	}
+}
+
+// TestExtract_CppConcept: a concept definition (under a template_declaration)
+// is a concept block.
+func TestExtract_CppConcept(t *testing.T) {
+	src := "template <typename T>\nconcept Addable = requires(T a, T b) { a + b; };\n"
+	blocks := extractCppBlocks(t, src)
+	km := kinds(blocks)
+	if len(km["concept"]) != 1 || km["concept"][0] != "Addable" {
+		t.Errorf("expected one concept 'Addable', got %v", km["concept"])
+	}
+	if len(blocks) != 1 || !strings.HasPrefix(blocks[0].Source, "template <typename T>") {
+		t.Errorf("concept block must include its template header, got %+v", blocks)
+	}
+}
+
+// TestExtract_ScopeAnnotation checks namespace and class paths.
+func TestExtract_ScopeAnnotation(t *testing.T) {
+	src := `namespace A {
+namespace B {
+int free_fn() { return 1; }
+}
+class Widget {
+ public:
+  Widget() {}
+  int value() const;
+};
+int Widget::value() const { return 0; }
+}
+int c_main() { return 0; }
+`
+	blocks := extractCppBlocks(t, src)
+	scope := map[string]string{}
+	for _, b := range blocks {
+		scope[string(b.Kind)+":"+b.Name] = b.Scope
+	}
+	if scope["function:free_fn"] != "A::B" {
+		t.Errorf("free_fn scope = %q, want A::B (all=%v)", scope["function:free_fn"], scope)
+	}
+	if scope["class:Widget"] != "A" {
+		t.Errorf("Widget scope = %q, want A", scope["class:Widget"])
+	}
+	// In-class and out-of-class method definitions both belong to A::Widget.
+	if scope["method:Widget"] != "A::Widget" {
+		t.Errorf("ctor scope = %q, want A::Widget", scope["method:Widget"])
+	}
+	if scope["method:value"] != "A::Widget" {
+		t.Errorf("out-of-class value() scope = %q, want A::Widget", scope["method:value"])
+	}
+	if scope["function:c_main"] != "" {
+		t.Errorf("plain C function scope = %q, want empty", scope["function:c_main"])
+	}
+}
+
+func TestExtract_NonCxxScopeEmpty(t *testing.T) {
+	blocks := extractFull(t, "class Widget { value() { return 1; } }\n")
+	for _, block := range blocks {
+		if block.Scope != "" {
+			t.Errorf("non-C/C++ blocks must not receive C++ scope tags: %+v", block)
+		}
+	}
+}
+
+// TestExtract_ScopeAnnotationNoNamespace: C functions have an empty scope;
+// the reporter must not assume a namespace always exists.
+func TestExtract_ScopeAnnotationNoNamespace(t *testing.T) {
+	blocks := extractCBlocks(t, "int main(void) { return 0; }\n")
+	if len(blocks) != 1 || blocks[0].Scope != "" {
+		t.Errorf("expected one top-level C function with empty scope, got %+v", blocks)
+	}
+}
+
+// TestExtract_CppBodylessSpecifiersSkipped ignores non-defining type references.
+func TestExtract_CppBodylessSpecifiersSkipped(t *testing.T) {
+	src := `class LoopSource;
+struct Node;
+class Box {
+ public:
+  int value;
+};
+static_assert (sizeof (struct pollfd) == sizeof (struct pollfd));
+`
+	blocks := extractCppBlocks(t, src)
+	var classes []string
+	for _, b := range blocks {
+		if b.Kind == ir.KindClass {
+			classes = append(classes, b.Name)
+		}
+	}
+	if len(classes) != 1 || classes[0] != "Box" {
+		t.Errorf("only the {…}-bodied class may extract, got %v", classes)
+	}
+}
+
+func TestExtract_CppTemplateClassIncludesHeader(t *testing.T) {
+	src := "template <typename T>\nclass Box { T value; };\n"
+	blocks := extractCppBlocks(t, src)
+	if len(blocks) != 1 || blocks[0].Kind != ir.KindClass || blocks[0].Name != "Box" {
+		t.Fatalf("expected one Box class block, got %+v", blocks)
+	}
+	if !strings.HasPrefix(blocks[0].Source, "template <typename T>") {
+		t.Errorf("class block must include its template header, got %q", blocks[0].Source)
+	}
+}
+
+// TestExtract_CppAliasDeclaration: `using X = ...;` is a type_alias block.
+func TestExtract_CppAliasDeclaration(t *testing.T) {
+	src := "using IntVec = int;\n"
+	blocks := extractCppBlocks(t, src)
+	km := kinds(blocks)
+	if len(km["type_alias"]) != 1 || km["type_alias"][0] != "IntVec" {
+		t.Errorf("expected one type_alias 'IntVec', got %v", km["type_alias"])
+	}
+}
+
+// TestExtract_CppLambdaAssigned: `auto f = [](int x){...};` at namespace scope
+// is one lambda block named f (the init_declarator owns the lambda).
+func TestExtract_CppLambdaAssigned(t *testing.T) {
+	src := "auto f = [](int x) { return x + 1; };\n"
+	blocks := extractCppBlocks(t, src)
+	km := kinds(blocks)
+	if len(km["lambda"]) != 1 || km["lambda"][0] != "f" {
+		t.Errorf("expected one lambda 'f', got %v", km["lambda"])
+	}
+}
+
+// TestExtract_CppLambdaLocal keeps function-local callbacks inline.
+func TestExtract_CppLambdaLocal(t *testing.T) {
+	src := "void sort_call() {\n  std::sort(v, v, [](int a, int b) { return a < b; });\n}\n"
+	blocks := extractCppBlocks(t, src)
+	km := kinds(blocks)
+	if len(km["lambda"]) != 0 {
+		t.Errorf("function-local bare lambda must not be extracted, got %v", km["lambda"])
+	}
+	if len(km["function"]) != 1 || km["function"][0] != "sort_call" {
+		t.Errorf("expected function sort_call, got %v", km["function"])
+	}
+}
+
+// TestExtract_CppLambdaScopes: lambdas at namespace scope and class scope are
+// standalone blocks; only function-local lambdas are treated as locals.
+func TestExtract_CppLambdaScopes(t *testing.T) {
+	src := `namespace app {
+auto pred = [](int a) { return a > 0; };
+}
+struct S {
+  auto cb = []() { return 1; };
+};
+`
+	blocks := extractCppBlocks(t, src)
+	km := kinds(blocks)
+	if len(km["lambda"]) != 2 {
+		t.Fatalf("expected the namespace-scope and class-scope lambdas, got %v", km["lambda"])
+	}
+	if km["lambda"][0] != "pred" {
+		t.Errorf("namespace-scope lambda should keep its declarator name, got %q", km["lambda"][0])
+	}
+	if km["lambda"][1] != "cb" {
+		t.Errorf("class-field lambda should keep its field name, got %q", km["lambda"][1])
+	}
+	for _, block := range blocks {
+		if block.Kind == ir.KindLambda && block.Name == "cb" {
+			if block.Source != "auto cb = []() { return 1; };" {
+				t.Errorf("class-field lambda should own its declaration, got %q", block.Source)
+			}
+		}
+	}
+}
+
+// TestExtract_CppOutOfClassDataMember resolves static member definitions.
+func TestExtract_CppOutOfClassDataMember(t *testing.T) {
+	src := `class C {
+ public:
+  static int value;
+};
+int C::value = 1;
+`
+	blocks := extractCppBlocks(t, src)
+	for _, block := range blocks {
+		if block.Kind == ir.KindVariable && block.Name == "value" {
+			if block.Parent == "" || block.Scope != "C" {
+				t.Errorf("out-of-class data member must resolve to C: %+v", block)
+			}
+			return
+		}
+	}
+	t.Fatalf("missing out-of-class data member block: %+v", blocks)
+}
+
+func TestExtract_CppInitializedFieldsStayInClass(t *testing.T) {
+	src := `class W {
+ public:
+  int value = 1;
+  auto callback = []() { return 2; };
+};
+`
+	blocks := extractCppBlocks(t, src)
+	km := kinds(blocks)
+	if len(km["variable"]) != 0 {
+		t.Errorf("initialized data members must not become variable blocks, got %v", km["variable"])
+	}
+	if len(km["lambda"]) != 1 || km["lambda"][0] != "callback" {
+		t.Errorf("class lambda field must remain a named lambda block, got %v", km["lambda"])
+	}
+}
+
+// TestExtract_CppMethodLocalDeclarations keeps method locals inside the method.
+func TestExtract_CppMethodLocalDeclarations(t *testing.T) {
+	src := "class W {\n public:\n  void m() {\n    int local = 1;\n    const int c = 2;\n  }\n};\n"
+	blocks := extractCppBlocks(t, src)
+	km := kinds(blocks)
+	if len(km["variable"]) != 0 {
+		t.Errorf("method-local variables must not be extracted, got %v", km["variable"])
+	}
+	if len(km["constant"]) != 0 {
+		t.Errorf("method-local constants must not be extracted, got %v", km["constant"])
+	}
+	if len(km["method"]) != 1 || km["method"][0] != "m" {
+		t.Errorf("expected method 'm', got %v", km["method"])
+	}
+}
+
+// TestExtract_CppMacroFunctionConditional: in C++ too, a function-like macro
+// emits KindFunction by default and KindMacroFunction when separate is set.
+func TestExtract_CppMacroFunctionConditional(t *testing.T) {
+	src := "#define ADD(a, b) ((a) + (b))\n"
+	if km := kinds(extractLangBlocks(t, "cpp", src, false)); len(km["function"]) != 1 || km["function"][0] != "ADD" {
+		t.Errorf("separate=false: expected function 'ADD', got %v", km["function"])
+	}
+	if km := kinds(extractLangBlocks(t, "cpp", src, true)); len(km["macro_function"]) != 1 || km["macro_function"][0] != "ADD" {
+		t.Errorf("separate=true: expected macro_function 'ADD', got %v", km["macro_function"])
+	}
+}
+
+func TestExtract_CFileScopeDeclarationWithoutInitializer(t *testing.T) {
+	src := "int x;\nstatic int y;\nint a, b;\nvoid (*handler)(int);\nint prototype(int);\n"
+	blocks := extractCBlocks(t, src)
+	got := map[string]ir.BlockKind{}
+	for _, block := range blocks {
+		got[block.Name] = block.Kind
+		if block.Span.StartByte < block.Span.EndByte {
+			if source := src[block.Span.StartByte:block.Span.EndByte]; source != block.Source {
+				t.Errorf("%s span/source mismatch: %q vs %q", block.Name, source, block.Source)
+			}
+		}
+	}
+	want := map[string]ir.BlockKind{
+		"x":         ir.KindVariable,
+		"y":         ir.KindVariable,
+		"a":         ir.KindVariable,
+		"b":         ir.KindVariable,
+		"handler":   ir.KindVariable,
+		"prototype": ir.KindFunction,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("expected %d declaration blocks, got %d: %+v", len(want), len(got), got)
+	}
+	for name, kind := range want {
+		if got[name] != kind {
+			t.Errorf("declaration %q: got %q, want %q", name, got[name], kind)
+		}
+	}
+}
+
+func TestExtract_CppFileScopeDeclarationWithoutInitializer(t *testing.T) {
+	src := "int value;\nvoid f(int);\nvoid (*handler)(int);\n"
+	blocks := extractCppBlocks(t, src)
+	got := map[string]ir.BlockKind{}
+	for _, block := range blocks {
+		got[block.Name] = block.Kind
+	}
+	want := map[string]ir.BlockKind{
+		"value":   ir.KindVariable,
+		"f":       ir.KindFunction,
+		"handler": ir.KindVariable,
+	}
+	for name, kind := range want {
+		if got[name] != kind {
+			t.Errorf("%s: got %q, want %q (all=%+v)", name, got[name], kind, got)
+		}
+	}
+}
+
+func TestExtract_CppMultipleTypedefDeclarators(t *testing.T) {
+	src := "typedef int A, B;\ntypedef int (*F)(int), (*G)(int);\n"
+	blocks := extractCppBlocks(t, src)
+	got := map[string]bool{}
+	for _, block := range blocks {
+		if block.Kind != ir.KindTypeAlias {
+			continue
+		}
+		got[block.Name] = true
+		if source := src[block.Span.StartByte:block.Span.EndByte]; source != block.Source {
+			t.Errorf("typedef %s span/source mismatch: %q vs %q", block.Name, source, block.Source)
+		}
+	}
+	for _, name := range []string{"A", "B", "F", "G"} {
+		if !got[name] {
+			t.Errorf("missing typedef alias %q in %+v", name, got)
+		}
+	}
+	if len(got) != 4 {
+		t.Errorf("expected exactly four typedef aliases, got %+v", got)
+	}
+}
+
+func TestExtract_CConstQualifiersFollowDeclarator(t *testing.T) {
+	src := "const int *p = 0;\nint * const q = 0;\nconst int (*r)() = 0;\n"
+	blocks := extractCBlocks(t, src)
+	got := map[string]ir.BlockKind{}
+	for _, block := range blocks {
+		got[block.Name] = block.Kind
+	}
+	want := map[string]ir.BlockKind{
+		"p": ir.KindVariable, // const applies to the pointee
+		"q": ir.KindConstant, // const applies to the pointer object
+		"r": ir.KindVariable, // const return type does not make the pointer object const
+	}
+	for name, kind := range want {
+		if got[name] != kind {
+			t.Errorf("%s: got %q, want %q (all=%+v)", name, got[name], kind, got)
+		}
+	}
+}
+
+func TestExtract_CppConstexprAndPointerQualifiers(t *testing.T) {
+	src := "constexpr int X = 1;\nconst int *p = 0;\nint * const q = 0;\n"
+	blocks := extractCppBlocks(t, src)
+	got := map[string]ir.BlockKind{}
+	for _, block := range blocks {
+		got[block.Name] = block.Kind
+	}
+	want := map[string]ir.BlockKind{
+		"X": ir.KindConstant,
+		"p": ir.KindVariable,
+		"q": ir.KindConstant,
+	}
+	for name, kind := range want {
+		if got[name] != kind {
+			t.Errorf("%s: got %q, want %q (all=%+v)", name, got[name], kind, got)
+		}
+	}
+}
+
+func TestExtract_CInlineTypeObjectSpansDoNotOverlap(t *testing.T) {
+	src := `struct S { int x; } s = {1};
+enum E { A } e = A;
+union U { int y; } u = {2};
+`
+	blocks := extractCBlocks(t, src)
+	byName := make(map[string]*ir.SemanticBlock, len(blocks))
+	for i := range blocks {
+		byName[blocks[i].Name] = &blocks[i]
+		if blocks[i].Span.StartByte >= blocks[i].Span.EndByte {
+			continue
+		}
+		if source := src[blocks[i].Span.StartByte:blocks[i].Span.EndByte]; source != blocks[i].Source {
+			t.Errorf("%s span/source mismatch: %q vs %q", blocks[i].Name, source, blocks[i].Source)
+		}
+	}
+	for _, name := range []string{"S", "E", "U", "s", "e", "u"} {
+		if byName[name] == nil {
+			t.Fatalf("missing inline type/object block %q: %+v", name, blocks)
+		}
+	}
+	for _, pair := range [][2]string{{"S", "s"}, {"E", "e"}, {"U", "u"}} {
+		typeBlock, objectBlock := byName[pair[0]], byName[pair[1]]
+		if typeBlock.Span.StartByte < objectBlock.Span.EndByte && objectBlock.Span.StartByte < typeBlock.Span.EndByte {
+			t.Errorf("inline type/object spans overlap: type=%+v object=%+v", *typeBlock, *objectBlock)
+		}
+	}
+	if byName["s"].Source != "s = {1};" || byName["e"].Source != "e = A;" || byName["u"].Source != "u = {2};" {
+		t.Errorf("object blocks should own only their declarators: s=%q e=%q u=%q", byName["s"].Source, byName["e"].Source, byName["u"].Source)
 	}
 }

@@ -31,6 +31,10 @@ func similarityTable(old, new []*ir.SemanticBlock, oldText, newText []string,
 	for i := 0; i < m; i++ {
 		table[i] = make([]float64, n)
 		for j := 0; j < n; j++ {
+			if !kindPairEligible(old[i].Kind, new[j].Kind) {
+				table[i][j] = ineligibleSim
+				continue
+			}
 			table[i][j] = sim(old[i], new[j], oldText[i], newText[j])
 		}
 	}

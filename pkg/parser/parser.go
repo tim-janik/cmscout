@@ -1,6 +1,6 @@
 // This Source Code Form is licensed MPL-2.0: http://mozilla.org/MPL/2.0
 
-// Package parser wraps tree-sitter (Phase 1: source → AST) for TS/TSX/JS/JSX/Go/Bash; CGO required.
+// Package parser wraps tree-sitter (Phase 1: source → AST) for TS/TSX/JS/JSX/Go/Bash/C/C++; CGO required.
 package parser
 
 import (
@@ -11,6 +11,8 @@ import (
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 	bashlang "github.com/tree-sitter/tree-sitter-bash/bindings/go"
+	clang "github.com/tree-sitter/tree-sitter-c/bindings/go"
+	cpplang "github.com/tree-sitter/tree-sitter-cpp/bindings/go"
 	golang "github.com/tree-sitter/tree-sitter-go/bindings/go"
 	jslang "github.com/tree-sitter/tree-sitter-javascript/bindings/go"
 	tslang "github.com/tree-sitter/tree-sitter-typescript/bindings/go"
@@ -45,6 +47,10 @@ func New(l lang.Language) (*Parser, error) {
 		langPtr = golang.Language()
 	case "bash":
 		langPtr = bashlang.Language()
+	case "c":
+		langPtr = clang.Language()
+	case "cpp":
+		langPtr = cpplang.Language()
 	default:
 		p.Close()
 		return nil, fmt.Errorf("unsupported language: %s", l.Name)

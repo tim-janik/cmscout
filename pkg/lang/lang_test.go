@@ -16,6 +16,17 @@ func TestDetect(t *testing.T) {
 		{"dir/sub/a.go", "go"}, // full path, not just basename
 		{"a.txt", ""},          // unknown extension
 		{"Makefile", ""},       // no extension
+
+		// C / C++: .c → c; the C++ extensions and `.h` → cpp.
+		{"a.c", "c"},
+		{"a.h", "cpp"},
+		{"a.cc", "cpp"}, {"a.cpp", "cpp"}, {"a.cxx", "cpp"}, {"a.c++", "cpp"},
+		{"a.hh", "cpp"}, {"a.hpp", "cpp"}, {"a.hxx", "cpp"}, {"a.h++", "cpp"},
+		{"a.tcc", "cpp"},
+		{"a.C", "cpp"},       // legacy capital-extension convention (raw-case special case)
+		{"a.H", "cpp"},       // lowercased by ToLower → `.h` → cpp
+		{"dir/x.CPP", "cpp"}, // case-insensitive beyond the raw `.C` special case
+		{"a.h.in", ""},       // compound extension, not recognized
 	}
 	for _, tt := range tests {
 		got, ok := Detect(tt.path)

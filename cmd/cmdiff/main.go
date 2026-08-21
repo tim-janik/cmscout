@@ -78,8 +78,12 @@ func runSemanticReview(cf compareFlags, summary, skipUnchanged bool, oldSrc, new
 	})
 
 	// Detect language support first: an unsupported side falls back without being parsed.
-	_, oldOK := lang.Detect(cf.oldName)
-	_, newOK := lang.Detect(cf.newName)
+	oldLang, oldOK := lang.Detect(cf.oldName)
+	newLang, newOK := lang.Detect(cf.newName)
+
+	// Separate macro kinds only when both inputs are C/C++.
+	separateMacros := oldOK && newOK &&
+		lang.HasMacroFunctions(oldLang) && lang.HasMacroFunctions(newLang)
 
 	var result *ir.CorrelationResult
 	usedFallback := false
@@ -88,11 +92,11 @@ func runSemanticReview(cf compareFlags, summary, skipUnchanged bool, oldSrc, new
 		usedFallback = true
 		result = synthesizeFallbackDiff(oldSrc, newSrc, cf.oldName, cf.newName, d)
 	} else {
-		oldDoc, err := parseAndExtract(oldSrc, cf.oldName)
+		oldDoc, err := parseAndExtract(oldSrc, cf.oldName, separateMacros)
 		if err != nil {
 			return fmt.Errorf("parsing old file: %w", err)
 		}
-		newDoc, err := parseAndExtract(newSrc, cf.newName)
+		newDoc, err := parseAndExtract(newSrc, cf.newName, separateMacros)
 		if err != nil {
 			return fmt.Errorf("parsing new file: %w", err)
 		}
@@ -179,7 +183,7 @@ func synthesizeFallbackDiff(oldSrc, newSrc, oldName, newName string, d *diff.Dif
 
 // writeReport prints the git-style header and renders via the text reporter.
 func writeReport(stdout io.Writer, opts report.Options, result *ir.CorrelationResult, oldName, newName string) error {
-	// Pass source languages to the reporter: backticks are templates in JS/TS but raw strings in Go.
+	// Pass source languages to the reporter so each lexer handles its literals correctly.
 	if oldLang, ok := lang.Detect(oldName); ok {
 		opts.OldLanguage = oldLang.Name
 	}
@@ -193,13 +197,36 @@ func writeReport(stdout io.Writer, opts report.Options, result *ir.CorrelationRe
 	return r.Write(stdout, result, "", "")
 }
 
-func parseAndExtract(src, path string) (*ir.SemanticDocument, error) {
+func parseAndExtract(src, path string, separateMacros bool) (*ir.SemanticDocument, error) {
 	// Reject undetected languages: parsing an unsupported file would fabricate parse errors.
 	langCode, ok := lang.Detect(path)
 	if !ok {
 		return nil, fmt.Errorf("unsupported language for %s", path)
 	}
 
+	// Choose C or C++ for .h files by parse recovery quality.
+	if langCode.Ext == ".h" {
+		cppDoc, cppErr := parseAndExtractLanguage(src, path, langCode, separateMacros)
+		cDoc, cErr := parseAndExtractLanguage(src, path, lang.Language{Name: "c", Ext: ".c"}, separateMacros)
+		switch {
+		case cppErr == nil && cErr == nil:
+			if cDoc.ParseErrors < cppDoc.ParseErrors {
+				return cDoc, nil
+			}
+			return cppDoc, nil // tie and C++ errors both prefer the documented default
+		case cppErr == nil:
+			return cppDoc, nil
+		case cErr == nil:
+			return cDoc, nil
+		default:
+			return nil, fmt.Errorf("C++ parse: %v; C parse: %v", cppErr, cErr)
+		}
+	}
+
+	return parseAndExtractLanguage(src, path, langCode, separateMacros)
+}
+
+func parseAndExtractLanguage(src, path string, langCode lang.Language, separateMacros bool) (*ir.SemanticDocument, error) {
 	// Create parser
 	p, err := parser.New(langCode)
 	if err != nil {
@@ -215,7 +242,7 @@ func parseAndExtract(src, path string) (*ir.SemanticDocument, error) {
 	defer ast.Close()
 
 	// Extract
-	ex := extract.New(path)
+	ex := extract.NewWithOptions(path, extract.Options{SeparateMacroFunctions: separateMacros})
 	doc, err := ex.Extract(ast)
 	if err != nil {
 		return nil, err

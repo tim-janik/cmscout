@@ -17,24 +17,28 @@ type SourceSpan struct {
 type BlockKind string
 
 const (
-	KindImport       BlockKind = "import"
-	KindExport       BlockKind = "export"
-	KindConstant     BlockKind = "constant"
-	KindVariable     BlockKind = "variable"
-	KindFunction     BlockKind = "function"
-	KindMethod       BlockKind = "method"
-	KindArrowFunc    BlockKind = "arrow_function"
-	KindClass        BlockKind = "class"
-	KindInterface    BlockKind = "interface"
-	KindTypeAlias    BlockKind = "type_alias"
-	KindEnum         BlockKind = "enum"
-	KindObjectMethod BlockKind = "object_method"
-	KindJSX          BlockKind = "jsx"
-	KindTemplate     BlockKind = "template"
-	KindComment      BlockKind = "comment"
-	KindDecorator    BlockKind = "decorator"
-	KindLifecycle    BlockKind = "lifecycle"
-	KindUnknown      BlockKind = "unknown"
+	KindImport        BlockKind = "import"
+	KindExport        BlockKind = "export"
+	KindConstant      BlockKind = "constant"
+	KindVariable      BlockKind = "variable"
+	KindFunction      BlockKind = "function"
+	KindMethod        BlockKind = "method"
+	KindArrowFunc     BlockKind = "arrow_function"
+	KindLambda        BlockKind = "lambda"
+	KindClass         BlockKind = "class"
+	KindInterface     BlockKind = "interface"
+	KindTypeAlias     BlockKind = "type_alias"
+	KindEnum          BlockKind = "enum"
+	KindObjectMethod  BlockKind = "object_method"
+	KindJSX           BlockKind = "jsx"
+	KindTemplate      BlockKind = "template"
+	KindMacroFunction BlockKind = "macro_function"
+	KindNamespace     BlockKind = "namespace"
+	KindConcept       BlockKind = "concept"
+	KindComment       BlockKind = "comment"
+	KindDecorator     BlockKind = "decorator"
+	KindLifecycle     BlockKind = "lifecycle"
+	KindUnknown       BlockKind = "unknown"
 )
 
 // SemanticBlock is the core IR entity — correlated, never judged "equivalent".
@@ -42,6 +46,7 @@ type SemanticBlock struct {
 	ID     string     // identifier unique within its source document (kind/name/offset)
 	Kind   BlockKind  // semantic classification
 	Name   string     // best-effort name (function/method/const name)
+	Scope  string     // enclosing namespace/class path for C/C++ blocks ("Ase::LoopImpl"; "" outside containers)
 	Parent string     // ID of parent block (e.g. class for methods)
 	Span   SourceSpan // byte range in source
 	Source string     // original source text
@@ -49,7 +54,7 @@ type SemanticBlock struct {
 
 // SemanticDocument is a collection of extracted blocks from a single source file.
 type SemanticDocument struct {
-	Language    string          // "ts", "tsx", "js", "jsx", "go", "bash"
+	Language    string          // "ts", "tsx", "js", "jsx", "go", "bash", "c", "cpp"
 	FilePath    string          // path to the source file (may be empty for stdin)
 	Blocks      []SemanticBlock // extracted semantic blocks
 	ParseErrors int             // number of tree-sitter ERROR/MISSING nodes; 0 = clean parse

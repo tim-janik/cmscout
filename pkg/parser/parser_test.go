@@ -35,6 +35,10 @@ func TestAST_CleanSource(t *testing.T) {
 		{"js", "function f(x) { return x + 1; }"},
 		{"go", "package main\nfunc ok() int { return 1 }\n"},
 		{"bash", "function f() { echo hi; }\n"},
+		// C: preprocessor, typedef, enum, function.
+		{"c", "#include <stdio.h>\n#define MAX 100\ntypedef struct Point { int x; int y; } Point;\nenum Color { RED, GREEN, BLUE };\nint add(int a, int b) { return a + b; }\n"},
+		// C++: namespace, template, concept, class with ctor/dtor/method, lambda.
+		{"cpp", "namespace app {\ntemplate <typename T>\nconcept Addable = requires(T a, T b) { a + b; };\nclass Widget {\n public:\n  Widget() {}\n  ~Widget() {}\n  int value() const { return 0; }\n};\nauto f = [](int x) { return x + 1; };\n}\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -83,6 +87,14 @@ func TestAST_ErrorCount_Malformed(t *testing.T) {
 		{"bash", "if then fi\n", 1},
 		// Bash: raw closing parens at top level → 1 ERROR.
 		{"bash", "))) ((( ", 1},
+		// C: stray '@' (no valid production starts with it) → 2 nested ERRORs.
+		{"c", "@", 1},
+		// C: malformed function-like macro → 1 ERROR.
+		{"c", "#define )(", 1},
+		// C++: stray '@' → 2 nested ERRORs.
+		{"cpp", "@", 1},
+		// C++: malformed concept definition → 1 ERROR.
+		{"cpp", "concept = ;", 1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

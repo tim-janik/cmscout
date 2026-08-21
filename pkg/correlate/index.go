@@ -169,7 +169,8 @@ func isOnlyWhitespace(s string) bool {
 func isCollapsibleChild(kind ir.BlockKind) bool {
 	switch kind {
 	case ir.KindMethod, ir.KindLifecycle, ir.KindFunction,
-		ir.KindArrowFunc, ir.KindObjectMethod, ir.KindJSX, ir.KindTemplate:
+		ir.KindArrowFunc, ir.KindObjectMethod, ir.KindJSX, ir.KindTemplate,
+		ir.KindLambda:
 		return true
 	default:
 		return false

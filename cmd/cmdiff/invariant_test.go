@@ -156,6 +156,73 @@ function start() {
 start();
 `
 
+// C fixture covers semantic blocks and an unextracted top-level call.
+const cOld = `#include <stdio.h>
+#define MAX 100
+#define ADD(a, b) ((a) + (b))
+typedef struct Point { int x; int y; } Point;
+int counter = 0;
+int greet(void) {
+  return MAX;
+}
+int add_real(int a, int b) {
+  return a + b;
+}
+setup();
+`
+
+const cNew = `#include <stdio.h>
+#define MAX 200
+#define ADD(a, b) ((a) - (b))
+typedef struct Point { int x; int y; } Point;
+int counter = 1;
+int greet(void) {
+  return MAX;
+}
+int added(void) {
+  return 0;
+}
+setup(1);
+`
+
+// C++ fixture covers namespaces, classes, macros, and an unextracted call.
+const cppOld = `#include <iostream>
+#define MAX 100
+#define ADD(a, b) ((a) + (b))
+namespace app {
+class Widget {
+ public:
+  Widget() {}
+  ~Widget() {}
+  int value() const { return 0; }
+};
+int greet(int x) {
+  return x;
+}
+}
+run();
+`
+
+const cppNew = `#include <iostream>
+#define MAX 200
+#define ADD(a, b) ((a) - (b))
+namespace app {
+class Widget {
+ public:
+  Widget() {}
+  ~Widget() {}
+  int value() const { return 1; }
+};
+int greet(int x) {
+  return x;
+}
+int added(int x) {
+  return x;
+}
+}
+run(1);
+`
+
 // Definitely-unknown languages: extensions not recognized by lang.Detect,
 // with contents that are not valid in any supported grammar.
 const xyzOld = `syntax unknown 1
@@ -199,6 +266,16 @@ var invariantCases = []invCase{
 	{"ts/js", "old.ts", tsOld, "new.js", jsNew},
 	{"ts/go", "old.ts", tsOld, "new.go", goNew},
 	{"go/sh", "old.go", goOld, "new.sh", shNew},
+
+	// C/C++ grammar pairs, cross-language pairs, and fallback cases.
+	{"c/c", "old.c", cOld, "new.c", cNew},
+	{"c/c identical", "old.c", cOld, "same.c", cOld},
+	{"cpp/cpp", "old.cpp", cppOld, "new.cpp", cppNew},
+	{"cpp/cpp identical", "old.cpp", cppOld, "same.cpp", cppOld},
+	{"c/cpp", "old.c", cOld, "new.cpp", cppNew},
+	{"c + unknown", "old.c", cOld, "new.xyz", xyzNew},
+	{"cpp + unknown", "old.cpp", cppOld, "new.xyz", xyzNew},
+	{"c → go", "old.c", cOld, "new.go", goOld},
 
 	// Exactly one input file is a definitely-unknown language.
 	{"ts + unknown", "old.ts", tsOld, "new.xyz", xyzNew},
@@ -411,13 +488,7 @@ var headerPct = regexp.MustCompile(`^  @@ -[0-9]+,[0-9]+ \+[0-9]+,[0-9]+ @@  .* 
 //	"  @@ -0,0 +1,1 @@  import { a, b }  [added]"
 var blockMarker = regexp.MustCompile(`^  @@ -[0-9]+,[0-9]+ \+[0-9]+,[0-9]+ @@  .*  \[(added|removed)\]$`)
 
-// assertHeaderSimilarityMatchesDiff enforces the structural invariant that
-// the header similarity and the shown diff always describe the same text:
-// a pair displayed at 100% similarity (without a [whitespace] tag) must not
-// render added/removed lines below it, and a pair with a change in its diff
-// must display below 100%. The report derives both from the pair's final
-// source text (matching.PairSimilarity and InnerDiff), so any regression
-// that lets the two diverge fails here.
+// assertHeaderSimilarityMatchesDiff checks that displayed percentages match the rendered diff.
 func assertHeaderSimilarityMatchesDiff(t *testing.T, output string) {
 	t.Helper()
 	pct := -1
@@ -455,11 +526,7 @@ func assertHeaderSimilarityMatchesDiff(t *testing.T, output string) {
 	}
 }
 
-// TestHeaderSimilarityMatchesDiff runs the whole pipeline (parse → match →
-// collapse → diff → report) on every invariant fixture and proves the header
-// percentage can never contradict the shown diff — the exact error class
-// reported for spin_drag_pointermove (100% header above a phantom -/+ line
-// introduced by non-canonical collapse references).
+// TestHeaderSimilarityMatchesDiff checks percentages across every fixture.
 func TestHeaderSimilarityMatchesDiff(t *testing.T) {
 	skipIfNoParser(t)
 
@@ -475,12 +542,7 @@ func TestHeaderSimilarityMatchesDiff(t *testing.T) {
 	}
 }
 
-// TestRepeatedLinesNotCollapsed guards the snippet-integrity property behind
-// the second reported issue: de-duplication must never collapse repeated
-// lines WITHIN one coherent rendering. An unchanged block (or the raw diff)
-// shows every occurrence — closing braces included — so each rendered
-// snippet stays self-consistent (valid JS), even when the same line content
-// occurs several times.
+// TestRepeatedLinesNotCollapsed keeps repeated source lines in each snippet.
 func TestRepeatedLinesNotCollapsed(t *testing.T) {
 	skipIfNoParser(t)
 
@@ -504,10 +566,7 @@ func TestRepeatedLinesNotCollapsed(t *testing.T) {
 	}
 }
 
-// TestSupplementRepeatedLines guards the whole-file coverage supplement: its
-// own added/removed hunks must render every occurrence (repeated identical
-// removed lines, e.g. several closing braces in a removed block, must not be
-// collapsed), while still suppressing lines the semantic sections showed.
+// TestSupplementRepeatedLines keeps repeated lines in the coverage supplement.
 func TestSupplementRepeatedLines(t *testing.T) {
 	skipIfNoParser(t)
 
@@ -528,10 +587,7 @@ func TestSupplementRepeatedLines(t *testing.T) {
 	}
 }
 
-// TestSkipUnchangedFlag exercises the --skip-unchanged CLI flag end to end:
-// blocks identical on both sides disappear from the detailed listing (and
-// from the coverage supplement), changed content still renders, and the
-// summary still counts the suppressed blocks.
+// TestSkipUnchangedFlag checks suppression, changed output, and summary counts.
 func TestSkipUnchangedFlag(t *testing.T) {
 	skipIfNoParser(t)
 
@@ -560,21 +616,13 @@ func TestSkipUnchangedFlag(t *testing.T) {
 			t.Errorf("--skip-unchanged: expected changed content %q in output\n%s", want, out)
 		}
 	}
-	// Summary still counts the unchanged blocks. The matched class parent is
-	// itself unchanged after its matched children are collapsed into
-	// reference comments (the changed render() method is counted separately).
+	// The summary still counts unchanged blocks and the changed method separately.
 	if !strings.Contains(out, "Unchanged: 5") {
 		t.Errorf("--skip-unchanged: summary should still count unchanged blocks\n%s", out)
 	}
 }
 
-// assertCoverage checks that every non-empty line of both inputs appears in
-// the command output — side-aware and occurrence-aware. A line that occurs
-// k times on the old side must be rendered at least k times as an old-side
-// line (removed or context), and likewise for the new side; a context line
-// represents one old line and one new line and counts toward both sides.
-// Reducing both inputs to one set of line contents cannot detect a missing
-// occurrence or an old line standing in for a new line.
+// assertCoverage checks side-aware, occurrence-aware coverage for both inputs.
 func assertCoverage(t *testing.T, cmd, output, oldSrc, newSrc string) {
 	t.Helper()
 	oldRendered := map[string]int{}
@@ -606,10 +654,7 @@ func assertCoverage(t *testing.T, cmd, output, oldSrc, newSrc string) {
 	assertSide("new", newSrc, newRendered)
 }
 
-// TestNestedRenameDeepStaysMatched: the F1 acceptance case —
-// outer → inner/renamedInner → deep. Recursive hierarchical matching must
-// keep `deep` a matched unchanged block after its parent was renamed; it
-// must never be emitted as an added/removed pair.
+// TestNestedRenameDeepStaysMatched keeps a grandchild through a parent rename.
 func TestNestedRenameDeepStaysMatched(t *testing.T) {
 	skipIfNoParser(t)
 
@@ -683,9 +728,7 @@ func TestNestedJSXAfterOuterRename(t *testing.T) {
 	}
 }
 
-// TestNestedMultipleLevelsAddRemove: multiple nested levels with an
-// addition and a removal at the deepest level: `keep` stays matched
-// through the renamed level, `gone` is removed, `added` is added.
+// TestNestedMultipleLevelsAddRemove checks deep additions and removals.
 func TestNestedMultipleLevelsAddRemove(t *testing.T) {
 	skipIfNoParser(t)
 
@@ -722,11 +765,7 @@ func TestNestedMultipleLevelsAddRemove(t *testing.T) {
 	}
 }
 
-// TestReorderedClassesWithDuplicateMethods is the end-to-end scope
-// regression: two classes that both define `foo`, reordered, with one real
-// change in A.bar. old A.foo must pair with new A.foo and old B.foo with
-// new B.foo; the report must show exactly two matched foo pairs at 100%
-// and no false cross-container method change.
+// TestReorderedClassesWithDuplicateMethods checks scope-aware reordering.
 func TestReorderedClassesWithDuplicateMethods(t *testing.T) {
 	skipIfNoParser(t)
 
@@ -782,9 +821,7 @@ class A {
 	}
 }
 
-// TestAddedMethodNotRewrittenE2E: adding a `foo` method in a second class
-// must leave the added block with its real source — never rewritten into a
-// "// [matched: method foo]" reference by global name canonicalization.
+// TestAddedMethodNotRewrittenE2E keeps an added method's source inside its class.
 func TestAddedMethodNotRewrittenE2E(t *testing.T) {
 	skipIfNoParser(t)
 
@@ -807,17 +844,21 @@ class B {
 	out := runTool(t, "--no-color", oldPath, newPath)
 	t.Logf("output:\n%s", out)
 
-	if !strings.Contains(out, "  + foo() { return 2; }") {
-		t.Errorf("the added B.foo block must render its real source:\n%s", out)
+	// The added B.foo method renders its real source inside the added class.
+	if !strings.Contains(out, "  +   foo() { return 2; }") {
+		t.Errorf("B.foo must render its real source inline in class B:\n%s", out)
 	}
-	if !strings.Contains(out, "foo  [added]") {
-		t.Errorf("B.foo must remain an added block:\n%s", out)
+	// Unchanged A.foo folds to a reference inside matched class A.
+	if !strings.Contains(out, "// [matched: method foo]") {
+		t.Errorf("unchanged A.foo must fold into a reference:\n%s", out)
+	}
+	// No standalone added-method block (the method is part of added class B).
+	if strings.Contains(out, "foo  [added]") {
+		t.Errorf("B.foo must not be listed standalone, it shows inside class B:\n%s", out)
 	}
 }
 
-// TestRemovedMethodKeepsSourceE2E: removing a class with a `foo` method
-// while another class's `foo` stays matched must render the removed
-// method's real source (not a matched reference).
+// TestRemovedMethodKeepsSourceE2E keeps a removed method's source inside its class.
 func TestRemovedMethodKeepsSourceE2E(t *testing.T) {
 	skipIfNoParser(t)
 
@@ -840,17 +881,69 @@ class B {
 	out := runTool(t, "--no-color", oldPath, newPath)
 	t.Logf("output:\n%s", out)
 
-	if !strings.Contains(out, "  - foo() { return 2; }") {
-		t.Errorf("the removed B.foo block must render its real source:\n%s", out)
+	// The removed B.foo method renders its real source inside the removed class.
+	if !strings.Contains(out, "  -   foo() { return 2; }") {
+		t.Errorf("B.foo must render its real source inline in removed class B:\n%s", out)
 	}
-	if !strings.Contains(out, "foo  [removed]") {
-		t.Errorf("B.foo must remain a removed block:\n%s", out)
+	// Unchanged A.foo folds to a reference inside matched class A.
+	if !strings.Contains(out, "// [matched: method foo]") {
+		t.Errorf("unchanged A.foo must fold into a reference:\n%s", out)
+	}
+	// No standalone removed-method block (the method is part of removed class B).
+	if strings.Contains(out, "foo  [removed]") {
+		t.Errorf("B.foo must not be listed standalone, it shows inside class B:\n%s", out)
 	}
 }
 
-// TestWordDiffEndToEnd: --word-diff on a normal one-line replacement must
-// surface added AND removed words (not only token splitting) in both the
-// the semantic report and --simple-diff.
+// TestNamespaceNotDiffedE2E keeps namespace members as separate components.
+func TestNamespaceNotDiffedE2E(t *testing.T) {
+	skipIfNoParser(t)
+
+	old := `namespace app {
+class Widget {
+ public:
+  int value() const { return 0; }
+};
+void greet() {}
+}
+`
+	new := `namespace app {
+class Widget {
+ public:
+  int value() const { return 0; }
+};
+void greet() {}
+void delay() {
+  auto p = [](int x) { return x; };
+  consume(p);
+}
+}
+`
+
+	dir := t.TempDir()
+	oldPath := writeFile(t, dir, "old.cc", old)
+	newPath := writeFile(t, dir, "new.cc", new)
+
+	out := runTool(t, "--no-color", oldPath, newPath)
+	t.Logf("output:\n%s", out)
+
+	if strings.Contains(out, "\nNamespaces\n") {
+		t.Errorf("namespaces must not be rendered as a component:\n%s", out)
+	}
+	// The added function is annotated with its namespace.
+	if !strings.Contains(out, "delay  [in app]  [added]") {
+		t.Errorf("added function must carry its namespace annotation, namespace after the name:\n%s", out)
+	}
+	// The function-local lambda stays inline; there is no Lambdas section.
+	if strings.Contains(out, "\nLambdas\n") {
+		t.Errorf("function-local lambda must not be a standalone block:\n%s", out)
+	}
+	if !strings.Contains(out, "[](int x) { return x; }") {
+		t.Errorf("the lambda must render inline inside delay():\n%s", out)
+	}
+}
+
+// TestWordDiffEndToEnd checks word markers in semantic and simple diffs.
 func TestWordDiffEndToEnd(t *testing.T) {
 	skipIfNoParser(t)
 
@@ -879,10 +972,7 @@ func TestWordDiffEndToEnd(t *testing.T) {
 	}
 }
 
-// TestIgnoreAllSpaceEndToEnd: --ignore-all-space on a file with both a
-// whitespace-only line change and a separate real change must represent
-// BOTH raw forms of the whitespace-only line — the old text must never be
-// emitted as if it were the new text.
+// TestGoRawStringClassificationEndToEnd treats Go raw-string content as semantic.
 func TestGoRawStringClassificationEndToEnd(t *testing.T) {
 	skipIfNoParser(t)
 
@@ -895,6 +985,65 @@ func TestGoRawStringClassificationEndToEnd(t *testing.T) {
 	}
 }
 
+// TestCppRawStringClassificationEndToEnd treats raw-string content as semantic.
+func TestCppRawStringClassificationEndToEnd(t *testing.T) {
+	skipIfNoParser(t)
+
+	dir := t.TempDir()
+	oldPath := writeFile(t, dir, "old.cpp", "auto s = R\"(a b)\";\n")
+	newPath := writeFile(t, dir, "new.cpp", "auto s = R\"(ab)\";\n")
+	out := runTool(t, "--no-color", oldPath, newPath)
+	if !strings.Contains(out, "Changed:   1") || strings.Contains(out, "Whitespace:") {
+		t.Errorf("C++ raw-string content changes must be semantic, not whitespace-only:\n%s", out)
+	}
+}
+
+// TestCIncludeTreatedAsImport: a #include is an import block and renders
+// under the Imports section (not Other), with its line preserved.
+func TestCIncludeTreatedAsImport(t *testing.T) {
+	skipIfNoParser(t)
+
+	dir := t.TempDir()
+	oldPath := writeFile(t, dir, "old.c", "#include <stdio.h>\nint main(void) { return 0; }\n")
+	newPath := writeFile(t, dir, "new.c", "#include <stdio.h>\nint main(void) { return 1; }\n")
+	out := runTool(t, "--no-color", oldPath, newPath)
+	if !strings.Contains(out, "Imports") {
+		t.Errorf("#include must render under the Imports section:\n%s", out)
+	}
+	if !strings.Contains(out, "#include <stdio.h>") {
+		t.Errorf("the #include line must appear in the report:\n%s", out)
+	}
+	if !strings.Contains(out, "@@ -1,1 +1,1 @@  <stdio.h>") {
+		t.Errorf("a one-line include must have a one-line hunk range:\n%s", out)
+	}
+}
+
+func TestHeaderChoosesCOrCppGrammarByParseQuality(t *testing.T) {
+	skipIfNoParser(t)
+
+	dir := t.TempDir()
+	pureCOld := writeFile(t, dir, "old.h", "typeof(int) value;\nint c_function(int);\n")
+	pureCNew := writeFile(t, dir, "new.h", "typeof(int) value;\nint c_function(int);\n")
+	out := runTool(t, "--no-color", pureCOld, pureCNew)
+	if strings.Contains(out, "Parse Errors:") {
+		t.Errorf("pure-C .h input should select the C grammar:\n%s", out)
+	}
+	if !strings.Contains(out, "Variables") || !strings.Contains(out, "c_function") {
+		t.Errorf("pure-C declarations should be extracted after selecting C:\n%s", out)
+	}
+
+	cppOld := writeFile(t, dir, "cpp-old.h", "class Widget { public: void render(); };\n")
+	cppNew := writeFile(t, dir, "cpp-new.h", "class Widget { public: void render(); };\n")
+	out = runTool(t, "--no-color", cppOld, cppNew)
+	if strings.Contains(out, "Parse Errors:") {
+		t.Errorf("C++ .h input should keep the C++ grammar:\n%s", out)
+	}
+	if !strings.Contains(out, "Methods") || !strings.Contains(out, "render") {
+		t.Errorf("C++ method declarations should remain semantic methods:\n%s", out)
+	}
+}
+
+// TestIgnoreAllSpaceEndToEnd preserves both raw forms of whitespace-only lines.
 func TestIgnoreAllSpaceEndToEnd(t *testing.T) {
 	skipIfNoParser(t)
 
@@ -962,13 +1111,7 @@ func TestSkipUnchangedSameLineComment(t *testing.T) {
 	}
 }
 
-// TestChangedCommentInsideMatchedContainer: a reworded comment nested under
-// a matched container is paired by the comment-only similarity table (F9 —
-// never against a code child), survives collapse even though both sides are
-// absorbed into the matched method's reference (F11 — a reworded absorbed
-// comment must stay visible), and renders in the Comments section without
-// the whole-file supplement re-showing the raw lines as a removal/addition
-// pair.
+// TestChangedCommentInsideMatchedContainer keeps absorbed comment changes visible.
 func TestChangedCommentInsideMatchedContainer(t *testing.T) {
 	skipIfNoParser(t)
 
@@ -1004,10 +1147,7 @@ func TestChangedCommentInsideMatchedContainer(t *testing.T) {
 	}
 }
 
-// TestCommentMovedOutOfContainerE2E: a prefix comment moved out of its
-// class is a matched, unchanged comment pair whose container changed: it
-// renders with [moved], counts as Moved, and the coverage supplement does
-// not duplicate the old indented line as a raw removal (F11).
+// TestRemovedPrefixCommentSurvivesCollapse keeps removed prefix comments visible.
 func TestRemovedPrefixCommentSurvivesCollapse(t *testing.T) {
 	skipIfNoParser(t)
 
@@ -1023,6 +1163,7 @@ func TestRemovedPrefixCommentSurvivesCollapse(t *testing.T) {
 	}
 }
 
+// TestCommentMovedOutOfContainerE2E checks moved-comment rendering and coverage.
 func TestCommentMovedOutOfContainerE2E(t *testing.T) {
 	skipIfNoParser(t)
 
@@ -1054,10 +1195,7 @@ func TestCommentMovedOutOfContainerE2E(t *testing.T) {
 	}
 }
 
-// TestFallbackNoParse: an unsupported-language input must go straight to
-// the whole-file fallback without being parsed as TypeScript (content that
-// would produce spurious TS parse errors must not surface a Parse Errors
-// row, and the whole-file diff must appear).
+// TestFallbackNoParse checks that unknown languages use the whole-file path.
 func TestFallbackNoParse(t *testing.T) {
 	skipIfNoParser(t)
 
@@ -1080,9 +1218,7 @@ func TestFallbackNoParse(t *testing.T) {
 	}
 }
 
-// TestMixedSupportedUnsupportedFallback: a supported side plus an
-// unsupported side falls back to a whole-file diff with no parse errors
-// and full coverage of both inputs.
+// TestMixedSupportedUnsupportedFallback checks mixed-language fallback.
 func TestMixedSupportedUnsupportedFallback(t *testing.T) {
 	skipIfNoParser(t)
 
@@ -1130,9 +1266,7 @@ func TestStdinPaths(t *testing.T) {
 	}
 }
 
-// TestNoInputSizeLimit: the project deliberately has no input-size limit.
-// A file larger than the historical 8 MiB cap must be accepted (and the
-// diff must stay correct). Single-line inputs keep the LCS table tiny.
+// TestNoInputSizeLimit checks that large inputs are accepted and diffed.
 func TestNoInputSizeLimit(t *testing.T) {
 	skipIfNoParser(t)
 
@@ -1147,10 +1281,7 @@ func TestNoInputSizeLimit(t *testing.T) {
 	}
 }
 
-// TestCLIFlagCombinations runs every diff/review flag and combinations of
-// them end to end: each invocation must succeed, keep the coverage
-// invariant (for the modes whose raw lines are preserved), and surface the
-// expected markers.
+// TestCLIFlagCombinations exercises the supported CLI flag combinations.
 func TestCLIFlagCombinations(t *testing.T) {
 	skipIfNoParser(t)
 
@@ -1160,9 +1291,7 @@ func TestCLIFlagCombinations(t *testing.T) {
 	oldPath := writeFile(t, dir, "old.ts", old)
 	newPath := writeFile(t, dir, "new.ts", new)
 
-	// --simple-diff: default, --word-diff, --ignore-all-space, and both. The
-	// coverage invariant applies to every combination that keeps raw lines
-	// (word-diff renders replacements as combined word lines).
+	// Simple diff covers default, word-diff, ignore-space, and their combination.
 	for _, combo := range [][]string{
 		nil,
 		{"--word-diff"},
@@ -1223,11 +1352,7 @@ func containsFlag(flags []string, want string) bool {
 	return false
 }
 
-// assertDiffNoDuplication checks that the raw diff shows every unique input
-// line exactly once (no loss, no repetition). Input lines whose content
-// occurs more than once across both inputs are exempt from the exact-once
-// check: repeated lines are legitimately shown once per occurrence and are
-// still covered by assertCoverage.
+// assertDiffNoDuplication checks exact-once rendering for unique input lines.
 func assertDiffNoDuplication(t *testing.T, output, oldSrc, newSrc string) {
 	t.Helper()
 	counts := map[string]int{}
@@ -1251,16 +1376,7 @@ func assertDiffNoDuplication(t *testing.T, output, oldSrc, newSrc string) {
 	}
 }
 
-// assertReviewDedupMinimized checks the de-duplication properties of the
-// review output:
-//
-//  1. The whole-file coverage supplement (rendered in the "Other" section)
-//     never repeats a (type, content) line already shown by a semantic
-//     section — it only fills gaps.
-//  2. The total number of content lines stays within a small multiple of the
-//     input size. The slack exists because a changed block is intentionally
-//     shown both inside its parent (e.g. a class) and as its own section, so
-//     a changed line can legitimately appear twice.
+// assertReviewDedupMinimized checks supplement de-duplication and output size.
 func assertReviewDedupMinimized(t *testing.T, output, oldSrc, newSrc string) {
 	t.Helper()
 	sections := splitSections(output)
@@ -1268,11 +1384,7 @@ func assertReviewDedupMinimized(t *testing.T, output, oldSrc, newSrc string) {
 		return // summary-only or empty body
 	}
 
-	// Property 1: the coverage supplement is rendered in the "Other"
-	// section (the last content section, before "Summary"). It must share
-	// no (type, content) line with the earlier semantic sections — it only
-	// fills gaps. (In the unknown-language fallback the whole-file pair also
-	// lands in "Other", with no earlier sections, so the check is vacuous.)
+	// Property 1: the Other section must only fill lines absent from semantic sections.
 	otherIdx := -1
 	for i, sec := range sections {
 		if sec.header == "Other" {
@@ -1295,9 +1407,7 @@ func assertReviewDedupMinimized(t *testing.T, output, oldSrc, newSrc string) {
 		}
 	}
 
-	// Property 2: lax size bound. Changed lines may appear twice (parent +
-	// own section); anything beyond 2× the input size plus a constant
-	// indicates a coverage/duplication regression.
+	// Property 2: allow changed lines twice, but reject unexpected duplication.
 	inputLines := len(nonEmptyLines(oldSrc)) + len(nonEmptyLines(newSrc))
 	rendered := len(extractContentLines(output))
 	if rendered > 2*inputLines+8 {

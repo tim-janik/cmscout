@@ -14,7 +14,7 @@ func lexicalTokens(s string) []string {
 	return lexicalTokensForLanguage(s, "")
 }
 
-// lexicalTokensForLanguage: backticks are templates (JS/TS), raw strings (Go), or command substitutions (Bash).
+// lexicalTokensForLanguage applies language-specific literal rules.
 func lexicalTokensForLanguage(s, language string) []string {
 	var tokens []string
 	i := 0
@@ -25,6 +25,14 @@ func lexicalTokensForLanguage(s, language string) []string {
 		switch {
 		case isSpaceByte(c):
 			i++
+		case (language == "c" || language == "cpp") && cStringPrefixLen(s, i) > 0:
+			j := skipCQuoted(s, i)
+			if language == "cpp" {
+				j = skipCppLiteralSuffix(s, j)
+			}
+			tokens = append(tokens, s[i:j])
+			last = s[i:j]
+			i = j
 		case c == '"' || c == '\'':
 			j := skipQuoted(s, i)
 			tokens = append(tokens, s[i:j])
@@ -42,10 +50,23 @@ func lexicalTokensForLanguage(s, language string) []string {
 			tokens = append(tokens, s[i:j])
 			last = s[i:j]
 			i = j
+		case c == '`' && (language == "c" || language == "cpp"):
+			// Treat C/C++ backticks as punctuation.
+			tokens = append(tokens, s[i:i+1])
+			last = s[i : i+1]
+			i++
 		case c == '`':
 			i = scanTemplate(s, i, &tokens, &last, language)
+		case language == "cpp" && cppRawStringPrefixLen(s, i) > 0:
+			// Keep C++ raw strings atomic.
+			j := skipCppRawString(s, i)
+			j = skipCppLiteralSuffix(s, j)
+			tokens = append(tokens, s[i:j])
+			last = s[i:j]
+			i = j
 		case c == '#' && ((language == "bash" && isBashCommentStart(s, i)) ||
-			(language != "bash" && (i+1 >= n || isSpaceByte(s[i+1])))):
+			(language != "bash" && language != "c" && language != "cpp" &&
+				(i+1 >= n || isSpaceByte(s[i+1])))):
 			// Bash comments run to the end of the line as one atomic token.
 			j := i
 			for j < n && s[j] != '\n' {
@@ -92,7 +113,9 @@ func lexicalTokensForLanguage(s, language string) []string {
 			for i < n {
 				c = s[i]
 				if isSpaceByte(c) || c == '"' || c == '\'' || c == '`' ||
-					(c == '/' && i+1 < n && (s[i+1] == '/' || s[i+1] == '*')) {
+					(c == '/' && i+1 < n && (s[i+1] == '/' || s[i+1] == '*')) ||
+					((language == "c" || language == "cpp") && i > runStart && !isIdentByte(s[i-1]) &&
+						(cppRawStringPrefixLen(s, i) > 0 || cStringPrefixLen(s, i) > 0)) {
 					break
 				}
 				i++
@@ -142,6 +165,64 @@ func skipRawBacktick(s string, i int) int {
 		return i + 1 + end + 1
 	}
 	return len(s)
+}
+
+// cStringPrefixLen recognizes C/C++ encoded literal prefixes.
+func cStringPrefixLen(s string, i int) int {
+	for _, prefix := range []string{"u8", "u", "U", "L"} {
+		if strings.HasPrefix(s[i:], prefix+`"`) || strings.HasPrefix(s[i:], prefix+`'`) {
+			return len(prefix)
+		}
+	}
+	return 0
+}
+
+func skipCQuoted(s string, i int) int {
+	prefixLen := cStringPrefixLen(s, i)
+	if prefixLen == 0 {
+		return min(len(s), i+1)
+	}
+	return skipQuoted(s, i+prefixLen)
+}
+
+func skipCppLiteralSuffix(s string, i int) int {
+	for i < len(s) && isIdentByte(s[i]) {
+		i++
+	}
+	return i
+}
+
+// cppRawStringPrefixLen recognizes C++ raw-literal prefixes.
+func cppRawStringPrefixLen(s string, i int) int {
+	for _, prefix := range []string{"u8R", "uR", "UR", "LR", "R"} {
+		if strings.HasPrefix(s[i:], prefix+`"`) {
+			return len(prefix)
+		}
+	}
+	return 0
+}
+
+// skipCppRawString returns the end of one C++ raw string token.
+func skipCppRawString(s string, i int) int {
+	// s[i:] starts with R" or one of the encoding-prefixed forms.
+	n := len(s)
+	prefixLen := cppRawStringPrefixLen(s, i)
+	if prefixLen == 0 {
+		return min(n, i+1)
+	}
+	p := i + prefixLen + 1 // past the opening quote
+	openParen := strings.IndexByte(s[p:], '(')
+	if openParen < 0 {
+		return n // malformed; keep the rest atomic
+	}
+	delim := s[p : p+openParen]
+	contentStart := p + openParen + 1 // past '('
+	close := ")" + delim + "\""
+	idx := strings.Index(s[contentStart:], close)
+	if idx < 0 {
+		return n
+	}
+	return contentStart + idx + len(close)
 }
 
 // scanTemplate: one token per text chunk (atomic), ${...} tokenized recursively;
@@ -271,11 +352,11 @@ var regexFollowSet = map[string]bool{
 	"throw": true, "default": true,
 }
 
-// multiCharOperators: multi-char operator tokens (TS/JS, Go, Bash), listed longest first.
+// multiCharOperators lists operators from longest to shortest.
 var multiCharOperators = []string{
-	">>>=", ">>>", ">>=", "<<=", "<<<", "&&=", "||=", "??=", "**=",
+	">>>=", ">>>", ">>=", "<<=", "<<<", "&&=", "||=", "??=", "**=", "->*", "<=>", "%:%:", "##",
 	"===", "!==", "...", ";;&",
-	">>", "<<", "&&", "||", "??", "?.", "++", "--", "**",
+	">>", "<<", "&&", "||", "??", "?.", "++", "--", "**", ".*", "<:", ":>", "<%", "%>", "%:",
 	"==", "!=", "<=", ">=", "=>", "::", "<-", "->", ":=",
 	"+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "=~", ";;", ";&",
 }
@@ -340,7 +421,7 @@ func isWhitespaceOnlyMatch(p *ir.CorrelatedPair) bool {
 	return isWhitespaceOnlyMatchForLanguages(p, "", "")
 }
 
-// isWhitespaceOnlyMatchForLanguages: per-side language rules (backticks differ between Go and JS).
+// isWhitespaceOnlyMatchForLanguages compares language-specific tokens.
 func isWhitespaceOnlyMatchForLanguages(p *ir.CorrelatedPair, oldLanguage, newLanguage string) bool {
 	if p.Old == nil || p.New == nil {
 		return false
