@@ -546,12 +546,36 @@ func (r *TextReporter) writeWordDiffLine(b *strings.Builder, c color, line *ir.D
 }
 
 func (r *TextReporter) writeSource(b *strings.Builder, c color, source string, col string, prefix, side string) {
+	// Body coloring: default white text with colored '+'/'-' prefix only; AddedStyle="green"
+	// or RemovedStyle="red" restore legacy full-line coloring.
+	bodyIsWhite := true
+	if col == c.green {
+		// Added block
+		style := r.Opts.AddedStyle
+		if style == "" {
+			style = "white"
+		}
+		bodyIsWhite = (style == "white")
+	} else if col == c.red {
+		// Removed block
+		style := r.Opts.RemovedStyle
+		if style == "" {
+			style = "white"
+		}
+		bodyIsWhite = (style == "white")
+	}
 	for _, line := range strings.Split(source, "\n") {
 		if line == "" {
 			continue
 		}
 		r.recordContent(side, line)
-		b.WriteString(fmt.Sprintf("%s%s%s%s\n", col, prefix, c.reset, line))
+		if bodyIsWhite {
+			// Only the prefix is colored, body is white (readable).
+			b.WriteString(fmt.Sprintf("%s%s%s%s\n", col, prefix, c.reset, line))
+		} else {
+			// Legacy: entire line colored (prefix + body same color).
+			b.WriteString(fmt.Sprintf("%s%s%s\n", col, prefix, line))
+		}
 	}
 }
 

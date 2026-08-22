@@ -35,6 +35,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		summary       bool
 		skipUnchanged bool
 		simpleDiff    bool
+		addedStyle    string
+		removedStyle  string
 	)
 
 	fs := flag.NewFlagSet("cmdiff", flag.ContinueOnError)
@@ -43,6 +45,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fs.BoolVar(&summary, "summary", false, "show only summary statistics")
 	fs.BoolVar(&skipUnchanged, "skip-unchanged", false, "suppress entirely unchanged components (blocks identical on both sides)")
 	fs.BoolVar(&simpleDiff, "simple-diff", false, "skip semantic analysis: emit a plain whole-file line diff")
+	fs.StringVar(&addedStyle, "added-style", "white", "how to color added blocks: 'white' (only '+' green, body white, readable) or 'green' (entire line green)")
+	fs.StringVar(&removedStyle, "removed-style", "white", "how to color removed blocks: 'white' (only '-' red, body white) or 'red' (entire line red)")
 	fs.Usage = func() { printUsage(stdout) }
 	if err := fs.Parse(args); err != nil {
 		if err == flag.ErrHelp {
@@ -63,13 +67,13 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	}
 
 	if simpleDiff {
-		return runSimpleDiff(cf, summary, skipUnchanged, oldSrc, newSrc, stdout)
+		return runSimpleDiff(cf, summary, skipUnchanged, addedStyle, removedStyle, oldSrc, newSrc, stdout)
 	}
-	return runSemanticReview(cf, summary, skipUnchanged, oldSrc, newSrc, stdout)
+	return runSemanticReview(cf, summary, skipUnchanged, addedStyle, removedStyle, oldSrc, newSrc, stdout)
 }
 
 // runSemanticReview runs the full pipeline (detect → parse → extract → match → correlate → diff → report).
-func runSemanticReview(cf compareFlags, summary, skipUnchanged bool, oldSrc, newSrc string, stdout io.Writer) error {
+func runSemanticReview(cf compareFlags, summary, skipUnchanged bool, addedStyle, removedStyle string, oldSrc, newSrc string, stdout io.Writer) error {
 	// Build pipeline with full context (the coverage supplement needs complete line representation).
 	d := diff.NewWithOpts(diff.Options{
 		WordDiff:    cf.wordDiff,
@@ -147,11 +151,13 @@ func runSemanticReview(cf compareFlags, summary, skipUnchanged bool, oldSrc, new
 		NoColor:       cf.noColor,
 		SummaryOnly:   summary,
 		SkipUnchanged: skipUnchanged,
+		AddedStyle:    addedStyle,
+		RemovedStyle:  removedStyle,
 	}, result, cf.oldName, cf.newName)
 }
 
 // runSimpleDiff emits a plain whole-file line diff, skipping the semantic pipeline entirely.
-func runSimpleDiff(cf compareFlags, summary, skipUnchanged bool, oldSrc, newSrc string, stdout io.Writer) error {
+func runSimpleDiff(cf compareFlags, summary, skipUnchanged bool, addedStyle, removedStyle string, oldSrc, newSrc string, stdout io.Writer) error {
 	d := diff.NewWithOpts(diff.Options{
 		WordDiff:    cf.wordDiff,
 		IgnoreSpace: cf.ignoreSpace,
@@ -161,6 +167,8 @@ func runSimpleDiff(cf compareFlags, summary, skipUnchanged bool, oldSrc, newSrc 
 		NoColor:       cf.noColor,
 		SummaryOnly:   summary,
 		SkipUnchanged: skipUnchanged,
+		AddedStyle:    addedStyle,
+		RemovedStyle:  removedStyle,
 	}, &ir.CorrelationResult{
 		Pairs: []ir.CorrelatedPair{{
 			Old:        &ir.SemanticBlock{Source: oldSrc, Kind: ir.KindUnknown, Name: cf.oldName},
@@ -309,6 +317,8 @@ Flags:
   --skip-unchanged        Suppress entirely unchanged components
   --word-diff             Highlight intra-line word changes
   --ignore-all-space      Ignore whitespace when comparing lines
+  --added-style white|green  How to color added blocks: 'white' (only '+' green, body white, default, readable) or 'green' (entire line green)
+  --removed-style white|red  How to color removed blocks: 'white' (only '-' red, body white, default) or 'red' (entire line red)
   -B, --before-contents <path>  Read old content from this file
   -A, --after-contents <path>   Read new content from this file
   --old <name>            Old display name (default: first argument)
