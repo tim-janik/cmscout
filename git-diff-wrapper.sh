@@ -32,6 +32,17 @@ if [ "${CMDIFF_KEEP_UNCHANGED-}" = "1" ]; then
   skip_flags=""
 fi
 
+# Added/removed body style flags (case separation for testing)
+# CMDIFF_ADDED_STYLE=white|green, CMDIFF_REMOVED_STYLE=white|red
+added_flags=""
+if [ -n "${CMDIFF_ADDED_STYLE-}" ]; then
+  added_flags="--added-style=$CMDIFF_ADDED_STYLE"
+fi
+removed_flags="--removed-style=red"
+if [ -n "${CMDIFF_REMOVED_STYLE-}" ]; then
+  removed_flags="--removed-style=$CMDIFF_REMOVED_STYLE"
+fi
+
 # /dev/null sides get an empty temp file so cmdiff can read them.
 old_tmp=""
 new_tmp=""
@@ -50,6 +61,6 @@ cleanup() {
 trap cleanup EXIT
 
 # No exec: the EXIT trap must remove the /dev/null temp files after cmdiff finishes.
-"$cmdiff_bin" $skip_flags \
+"$cmdiff_bin" $skip_flags $added_flags $removed_flags \
     -B "$old_content" -A "$new_content" \
     "a/$old_name" "b/$new_name"
