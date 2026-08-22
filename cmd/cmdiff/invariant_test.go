@@ -1138,6 +1138,144 @@ func TestChangedCommentInsideMatchedContainer(t *testing.T) {
 	}
 }
 
+// TestMultiLinePrefixCommentShownWhole: a changed multi-line prefix comment must
+// attach to the following function as a whole. Each `//` line is its own tree-sitter
+// comment node; without run expansion only the last comment line would attach and
+// the start of the comment would be lost as diff context.
+func TestMultiLinePrefixCommentShownWhole(t *testing.T) {
+	skipIfNoParser(t)
+
+	old := "// Handles the pointer\n// down event for the widget\n// including wheel input\nfunction onDown() { return 1; }\n"
+	new := "// Handles the pointer\n// down event for the widget\n// including wheel and touch input\nfunction onDown() { return 1; }\n"
+
+	dir := t.TempDir()
+	oldPath := writeFile(t, dir, "old.ts", old)
+	newPath := writeFile(t, dir, "new.ts", new)
+
+	out := runTool(t, "--no-color", oldPath, newPath)
+	t.Logf("output:\n%s", out)
+
+	// The whole comment run renders inside the function pair: the two unchanged
+	// leading lines appear as context, the changed last line as -/+.
+	for _, want := range []string{" // Handles the pointer", " // down event for the widget", "-// including wheel input", "+// including wheel and touch input", "function onDown() { return 1; }"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in the function diff:\n%s", want, out)
+		}
+	}
+	// The start of the comment must not be lost: no standalone comment pairs remain.
+	for _, marker := range []string{"comment  [added]", "comment  [removed]", "comment  100% similarity"} {
+		if strings.Contains(out, marker) {
+			t.Errorf("prefix comment lines must attach to the function, found %q:\n%s", marker, out)
+		}
+	}
+	// Same requirement under --skip-unchanged: the changed prefix comment keeps
+	// its leading comment lines as context.
+	out = runTool(t, "--no-color", "--skip-unchanged", oldPath, newPath)
+	t.Logf("skip-unchanged output:\n%s", out)
+	for _, want := range []string{" // Handles the pointer", "-// including wheel input", "+// including wheel and touch input"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("--skip-unchanged: expected %q in the function diff:\n%s", want, out)
+		}
+	}
+	// The summary counts the comment rewording as one changed block.
+	if !strings.Contains(out, "Changed:   1") {
+		t.Errorf("the rewording must count as a single Changed block:\n%s", out)
+	}
+}
+
+// TestMultiLinePrefixCommentAdded: a whole added comment run attaches to the
+// following function, not just its last line.
+func TestMultiLinePrefixCommentAdded(t *testing.T) {
+	skipIfNoParser(t)
+
+	old := "function onDown() { return 1; }\n"
+	new := "// Handles the pointer\n// down event for the widget\n// including wheel input\nfunction onDown() { return 1; }\n"
+
+	dir := t.TempDir()
+	oldPath := writeFile(t, dir, "old.ts", old)
+	newPath := writeFile(t, dir, "new.ts", new)
+
+	out := runTool(t, "--no-color", oldPath, newPath)
+	t.Logf("output:\n%s", out)
+
+	for _, want := range []string{"+// Handles the pointer", "+// down event for the widget", "+// including wheel input", "function onDown() { return 1; }"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in the function diff:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "comment  [added]") {
+		t.Errorf("added prefix comment lines must attach to the function, not render standalone:\n%s", out)
+	}
+}
+
+// TestPrefixCounterpartNotCleanPrefixStaysStandalone: an added comment whose old
+// counterpart is not a clean prefix of the old component (blank line in between)
+// must leave the whole group standalone. Attaching only the new side duplicated
+// the matched comment text: it rendered inside the component diff AND as a
+// standalone comment pair.
+func TestPrefixCounterpartNotCleanPrefixStaysStandalone(t *testing.T) {
+	skipIfNoParser(t)
+
+	old := "// line1\n/* multi\n   line note */\n\nfunction onDown() { return 1; }\n"
+	new := "// line1\n/* multi\n   line note */\n// lineX\nfunction onDown() { return 1; }\n"
+
+	dir := t.TempDir()
+	oldPath := writeFile(t, dir, "old.ts", old)
+	newPath := writeFile(t, dir, "new.ts", new)
+
+	out := runTool(t, "--no-color", oldPath, newPath)
+	t.Logf("output:\n%s", out)
+
+	// No duplication: each comment line renders exactly once, as standalone entries.
+	// If a run side were attached to the function, its text would appear twice (once
+	// in the component diff, once as a standalone comment pair).
+	for _, want := range []string{"// line1", "/* multi", "// lineX"} {
+		if strings.Count(out, want) != 1 {
+			t.Errorf("comment text %q must render exactly once:\n%s", want, out)
+		}
+	}
+	// The function pair must be untouched: no comment text inside its diff.
+	funcSection := strings.SplitN(out, "Comments", 2)[0]
+	if strings.Contains(funcSection, "// line1") || strings.Contains(funcSection, "/* multi") || strings.Contains(funcSection, "// lineX") {
+		t.Errorf("comments must stay standalone, not attach to the function:\n%s", funcSection)
+	}
+	// The added comment renders as a standalone added entry.
+	if !strings.Contains(out, "comment  [added]") {
+		t.Errorf("the added comment must render as a standalone added entry:\n%s", out)
+	}
+}
+
+// TestPrefixRewordedLastLineKeepsInsideComponent: a reworded last line of a
+// prefix comment run that falls below the similarity threshold must still attach
+// to the following component. The whole run is attached on both sides so the
+// reword surfaces inside the component diff, not as standalone removed+added
+// comment pairs. No duplicate rendering of the preceding comment lines.
+func TestPrefixRewordedLastLineKeepsInsideComponent(t *testing.T) {
+	skipIfNoParser(t)
+
+	old := "// line1\n// line2\nfunction onDown() { return 1; }\n"
+	new := "// line1\n// line2 changed\nfunction onDown() { return 1; }\n"
+
+	dir := t.TempDir()
+	oldPath := writeFile(t, dir, "old.ts", old)
+	newPath := writeFile(t, dir, "new.ts", new)
+
+	out := runTool(t, "--no-color", oldPath, newPath)
+	t.Logf("output:\n%s", out)
+
+	// The function diff must contain the whole comment run and the reword.
+	if !strings.Contains(out, "// line1") || !strings.Contains(out, "-// line2") || !strings.Contains(out, "+// line2 changed") || !strings.Contains(out, "onDown") {
+		t.Errorf("the reworded comment must render inside the function diff:\n%s", out)
+	}
+	// No standalone comment pairs: the preceding line is not duplicated.
+	if strings.Count(out, "// line1") != 1 {
+		t.Errorf("\"// line1\" must render exactly once:\n%s", out)
+	}
+	if strings.Contains(out, "comment  [removed]") || strings.Contains(out, "comment  [added]") {
+		t.Errorf("no standalone comment entries must remain:\n%s", out)
+	}
+}
+
 // TestRemovedPrefixCommentSurvivesCollapse keeps removed prefix comments visible.
 func TestRemovedPrefixCommentSurvivesCollapse(t *testing.T) {
 	skipIfNoParser(t)
@@ -1149,8 +1287,15 @@ func TestRemovedPrefixCommentSurvivesCollapse(t *testing.T) {
 	newPath := writeFile(t, dir, "new.ts", new)
 
 	out := runTool(t, "--no-color", oldPath, newPath)
-	if !strings.Contains(out, "comment  [removed]") || !strings.Contains(out, "Removed:   1") {
-		t.Errorf("a removed prefix comment must remain a semantic removal after collapse:\n%s", out)
+	// With prefix attachment, a removed doc-prefix is rendered as part of
+	// the following component (the method) rather than as a standalone
+	// comment removal. The method's diff shows the prefix removal and the
+	// standalone Comments section no longer contains it.
+	if !strings.Contains(out, "foo") || !strings.Contains(out, "-// removed") {
+		t.Errorf("a removed prefix comment must appear inside its component's diff:\n%s", out)
+	}
+	if strings.Contains(out, "comment  [removed]") {
+		t.Errorf("removed prefix must not remain as a separate comment entry (now part of its component):\n%s", out)
 	}
 }
 
