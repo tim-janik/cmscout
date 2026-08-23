@@ -191,7 +191,7 @@ func TestTextReport_NestedAddedMemberInlineOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := buf.String()
-	if !strings.Contains(out, "  +   std::shared_ptr<void> delay ();") {
+	if !strings.Contains(out, "+  std::shared_ptr<void> delay ();") {
 		t.Errorf("the added method must render inline in the class diff:\n%s", out)
 	}
 	if strings.Contains(out, "delay  [added]") {
@@ -355,7 +355,7 @@ func TestTextReport_EmptySectionsOmitted(t *testing.T) {
 }
 
 // TestTextReport_BlankDiffLinesOmitted verifies that blank lines inside a
-// diff (empty content) are not rendered as stray "  " / "+ " / "- " rows,
+// diff (empty content) are not rendered as stray "  " / "+" / "-" rows,
 // so components are not surrounded by excessive blank context lines.
 func TestTextReport_BlankDiffLinesOmitted(t *testing.T) {
 	result := &ir.CorrelationResult{
@@ -387,13 +387,13 @@ func TestTextReport_BlankDiffLinesOmitted(t *testing.T) {
 	output := buf.String()
 	t.Logf("report:\n%s", output)
 
-	for _, stray := range []string{"\n  - \n", "\n  + \n", "\n   \n"} {
+	for _, stray := range []string{"\n-\n", "\n+\n", "\n \n"} {
 		if strings.Contains(output, stray) {
 			t.Errorf("blank diff lines should not be rendered (found %q)\n%s", stray, output)
 		}
 	}
 	// The meaningful lines still render.
-	for _, want := range []string{"  - b", "  + x"} {
+	for _, want := range []string{"-b", "+x"} {
 		if !strings.Contains(output, want) {
 			t.Errorf("expected %q in output\n%s", want, output)
 		}
@@ -717,12 +717,12 @@ func TestTextReport_CommentMovedOutOfContainer(t *testing.T) {
 	// The raw supplement must not duplicate the old comment line: it
 	// differs from the semantic context line only by indentation and the
 	// comment pair owns the line.
-	if strings.Contains(output, "-   // note") {
+	if strings.Contains(output, "-  // note") {
 		t.Errorf("supplement must not re-show the indented old comment as a raw removal:\n%s", output)
 	}
 	// The comment's content still renders once, as the semantic context
 	// line of the matched pair.
-	if !strings.Contains(output, "   // note") {
+	if !strings.Contains(output, " // note") {
 		t.Errorf("the comment must render as a semantic context line:\n%s", output)
 	}
 	// The nested method's raw line stays in the supplement (it is not
@@ -872,7 +872,7 @@ func TestTextReport_CommentRewordedWhileMoving(t *testing.T) {
 	if !strings.Contains(output, "Changed:   1") {
 		t.Errorf("the rewording must count as Changed:\n%s", output)
 	}
-	if strings.Contains(output, "-   // old note") || strings.Contains(output, "+   // new note") {
+	if strings.Contains(output, "-  // old note") || strings.Contains(output, "+  // new note") {
 		t.Errorf("supplement must not duplicate the reworded comment lines:\n%s", output)
 	}
 }
@@ -1291,18 +1291,19 @@ func TestTextReport_NewContentNewBlankRendering(t *testing.T) {
 
 	// Both raw forms of line 1 are rendered as context lines (the old text
 	// is never presented as the new text).
-	if !strings.Contains(out, "   a = 1") || !strings.Contains(out, "   a=1") {
+	if !strings.Contains(out, " a = 1") || !strings.Contains(out, " a=1") {
 		t.Errorf("both raw forms of the changed line must render:\n%s", out)
 	}
 	// The old whitespace-only line renders once as context; its blank new
 	// counterpart adds nothing.
-	if !strings.Contains(out, "      \n") {
+	if !strings.Contains(out, "    \n") {
 		t.Errorf("the old whitespace-only line must render:\n%s", out)
 	}
 	// No line may carry a + / - prefix for the normalized-equal pair.
-	if strings.Contains(out, "+ a = 1") || strings.Contains(out, "+   ") ||
-		strings.Contains(out, "- a = 1") {
-		t.Errorf("whitespace-only differences must render as context, not +/-:\n%s", out)
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "+") || strings.HasPrefix(line, "-") {
+			t.Errorf("whitespace-only differences must render as context, not +/-:\nline: %q\noutput:\n%s", line, out)
+		}
 	}
 }
 

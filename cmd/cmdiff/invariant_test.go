@@ -344,34 +344,14 @@ type contentLine struct {
 	content string
 }
 
-// extractContentLines pulls the diff content lines out of a --no-color text
-// report. Content lines are the ones rendered by the diff/report layers:
-//
-//	"  + content"  (added)
-//	"  - content"  (removed)
-//	"   content"   (context, three spaces)
-//
-// Section headers, pair headers ("  @@ -1,2 +1,2 @@  name ..."), summary rows, and the
-// "diff --cmdiff" line are not content lines. Empty content (blank
-// lines in a diff) is skipped: the invariants concern non-empty lines.
+// extractContentLines returns non-empty +, -, and context rows from a report.
+// Headers and summary rows are ignored.
 func extractContentLines(output string) []contentLine {
 	var out []contentLine
 	for _, line := range strings.Split(output, "\n") {
-		var typ, content string
-		switch {
-		case strings.HasPrefix(line, "  + "):
-			typ, content = "added", line[4:]
-		case strings.HasPrefix(line, "  - "):
-			typ, content = "removed", line[4:]
-		case strings.HasPrefix(line, "   "):
-			typ, content = "context", line[3:]
-		default:
-			continue
+		if cl := contentLineOf(line); cl != nil {
+			out = append(out, *cl)
 		}
-		if content == "" {
-			continue
-		}
-		out = append(out, contentLine{typ: typ, content: content})
 	}
 	return out
 }
@@ -419,21 +399,25 @@ type section struct {
 
 // isSectionHeader reports whether a line starts a new section in a report
 // (kind headers, "Summary", the "diff --cmdiff" header, "Other", etc.).
-// Content lines always start with "  + ", "  - ", or "   ".
+// Content lines always start with "+", "-", or " ".
 func isSectionHeader(line string) bool {
 	return contentLineOf(line) == nil
 }
 
 // contentLineOf parses one output line as a content line, or nil.
 func contentLineOf(line string) *contentLine {
+	trimmed := strings.TrimSpace(line)
+	if strings.HasPrefix(line, "  ") && isSummaryRow(trimmed) {
+		return nil
+	}
 	var typ, content string
 	switch {
-	case strings.HasPrefix(line, "  + "):
-		typ, content = "added", line[4:]
-	case strings.HasPrefix(line, "  - "):
-		typ, content = "removed", line[4:]
-	case strings.HasPrefix(line, "   "):
-		typ, content = "context", line[3:]
+	case strings.HasPrefix(line, "+"):
+		typ, content = "added", line[1:]
+	case strings.HasPrefix(line, "-"):
+		typ, content = "removed", line[1:]
+	case strings.HasPrefix(line, " "):
+		typ, content = "context", line[1:]
 	default:
 		return nil
 	}
@@ -441,6 +425,18 @@ func contentLineOf(line string) *contentLine {
 		return nil
 	}
 	return &contentLine{typ: typ, content: content}
+}
+
+func isSummaryRow(line string) bool {
+	for _, prefix := range []string{
+		"Matched:", "Unchanged:", "Changed:", "Renamed:", "Moved:",
+		"Added:", "Removed:", "Whitespace:", "Parse Errors:",
+	} {
+		if strings.HasPrefix(line, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // ---------------------------------------------------------------------------
@@ -477,16 +473,11 @@ func TestCoverageInvariant(t *testing.T) {
 // headerPct matches a matched-pair header line and captures the displayed
 // similarity percentage:
 //
-//	"  @@ -63,186 +64,118 @@  spin_drag_pointermove  100% similarity  [moved]"
-var headerPct = regexp.MustCompile(`^  @@ -[0-9]+,[0-9]+ \+[0-9]+,[0-9]+ @@  .*  ([0-9]+)% similarity(  .*)?$`)
+//	"@@ -63,186 +64,118 @@  spin_drag_pointermove  100% similarity  [moved]"
+var headerPct = regexp.MustCompile(`^@@ -[0-9]+,[0-9]+ \+[0-9]+,[0-9]+ @@  .*  ([0-9]+)% similarity(  .*)?$`)
 
-// blockMarker matches a standalone added/removed block marker, which has no
-// similarity header. The block name may contain spaces (e.g. import lists):
-//
-//	"  @@ -0,0 +294,14 @@  added  [added]"
-//	"  @@ -63,8 +0,0 @@  render  [removed]"
-//	"  @@ -0,0 +1,1 @@  import { a, b }  [added]"
-var blockMarker = regexp.MustCompile(`^  @@ -[0-9]+,[0-9]+ \+[0-9]+,[0-9]+ @@  .*  \[(added|removed)\]$`)
+// blockMarker matches a standalone added or removed block header.
+var blockMarker = regexp.MustCompile(`^@@ -[0-9]+,[0-9]+ \+[0-9]+,[0-9]+ @@  .*  \[(added|removed)\]$`)
 
 // assertHeaderSimilarityMatchesDiff checks that displayed percentages match the rendered diff.
 func assertHeaderSimilarityMatchesDiff(t *testing.T, output string) {
@@ -514,7 +505,7 @@ func assertHeaderSimilarityMatchesDiff(t *testing.T, output string) {
 		if !inPair {
 			continue
 		}
-		if strings.HasPrefix(line, "  + ") || strings.HasPrefix(line, "  - ") {
+		if strings.HasPrefix(line, "+") || strings.HasPrefix(line, "-") {
 			if pct == 100 && !whitespaceTagged {
 				t.Errorf("pair header claims 100%% similarity but its diff shows a change:\n%s\noutput:\n%s", line, output)
 			}
@@ -845,7 +836,7 @@ class B {
 	t.Logf("output:\n%s", out)
 
 	// The added B.foo method renders its real source inside the added class.
-	if !strings.Contains(out, "  +   foo() { return 2; }") {
+	if !strings.Contains(out, "+  foo() { return 2; }") {
 		t.Errorf("B.foo must render its real source inline in class B:\n%s", out)
 	}
 	// Unchanged A.foo folds to a reference inside matched class A.
@@ -882,7 +873,7 @@ class B {
 	t.Logf("output:\n%s", out)
 
 	// The removed B.foo method renders its real source inside the removed class.
-	if !strings.Contains(out, "  -   foo() { return 2; }") {
+	if !strings.Contains(out, "-  foo() { return 2; }") {
 		t.Errorf("B.foo must render its real source inline in removed class B:\n%s", out)
 	}
 	// Unchanged A.foo folds to a reference inside matched class A.
@@ -1127,7 +1118,7 @@ func TestChangedCommentInsideMatchedContainer(t *testing.T) {
 
 	// The reworded comment renders as a matched comment pair with its own
 	// before/after diff in the Comments section.
-	if !strings.Contains(out, "- // Handles pointerdown") || !strings.Contains(out, "+ // Handles pointerdown event") {
+	if !strings.Contains(out, "-// Handles pointerdown") || !strings.Contains(out, "+// Handles pointerdown event") {
 		t.Errorf("the changed comment must render as a matched comment diff:\n%s", out)
 	}
 	// It is never paired against the method (no comment/code assignment).

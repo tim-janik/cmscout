@@ -352,13 +352,13 @@ func (r *TextReporter) writePairHeader(b *strings.Builder, c color, p *ir.Correl
 		if name == "" {
 			name = string(p.New.Kind)
 		}
-		b.WriteString(fmt.Sprintf("  %s  %s%s  %s[added]%s\n", hunk, name, scopeTag(p), c.green, c.reset))
+		b.WriteString(fmt.Sprintf("%s  %s%s  %s[added]%s\n", hunk, name, scopeTag(p), c.green, c.reset))
 	case p.IsRemoved():
 		name := p.Old.Name
 		if name == "" {
 			name = string(p.Old.Kind)
 		}
-		b.WriteString(fmt.Sprintf("  %s  %s%s  %s[removed]%s\n", hunk, name, scopeTag(p), c.red, c.reset))
+		b.WriteString(fmt.Sprintf("%s  %s%s  %s[removed]%s\n", hunk, name, scopeTag(p), c.red, c.reset))
 	default:
 		oldName := p.Old.Name
 		newName := p.New.Name
@@ -382,7 +382,7 @@ func (r *TextReporter) writePairHeader(b *strings.Builder, c color, p *ir.Correl
 			tags = append(tags, "[whitespace]")
 		}
 		sim := similarityFor(p)
-		b.WriteString(fmt.Sprintf("  %s  %s%s  %s%.0f%% similarity%s",
+		b.WriteString(fmt.Sprintf("%s  %s%s  %s%.0f%% similarity%s",
 			hunk, label, scopeTag(p), c.cyan, sim, c.reset))
 		// Tags use yellow: gray is reserved for the @@ range, green/red for one-sided pairs.
 		for _, tag := range tags {
@@ -432,7 +432,7 @@ func (r *TextReporter) writeMatched(b *strings.Builder, c color, p *ir.Correlate
 		r.writeContextSource(b, c, p)
 		// "(no structural changes)" label only for clean exact-name matches.
 		if p.MatchType == ir.MatchExactName {
-			b.WriteString(fmt.Sprintf("  %s(no structural changes)%s\n", c.gray, c.reset))
+			b.WriteString(fmt.Sprintf("%s(no structural changes)%s\n", c.gray, c.reset))
 		}
 		return
 	}
@@ -463,13 +463,13 @@ func (r *TextReporter) writeDiffLine(b *strings.Builder, c color, line *ir.DiffL
 			r.writeWordDiffLine(b, c, line)
 			return
 		}
-		b.WriteString(fmt.Sprintf("  %s+%s %s\n", c.green, c.reset, line.Content))
+		b.WriteString(fmt.Sprintf("%s+%s%s\n", c.green, c.reset, line.Content))
 	case ir.DiffLineRemoved:
 		if r.suppress && r.shouldSuppressSide(oldSide, line.Content, line.OldNo, false) {
 			return
 		}
 		r.recordContent(oldSide, line.Content)
-		b.WriteString(fmt.Sprintf("  %s-%s %s\n", c.red, c.reset, line.Content))
+		b.WriteString(fmt.Sprintf("%s-%s%s\n", c.red, c.reset, line.Content))
 	default:
 		// Context: under --ignore-all-space, both raw forms are emitted (old text never masquerades as new).
 		newContent := line.Content
@@ -494,11 +494,11 @@ func (r *TextReporter) writeDiffLine(b *strings.Builder, c color, line *ir.DiffL
 		if line.NewContent != "" {
 			// Two raw forms: render each side separately (both as context
 			// lines; this is not a structural change).
-			b.WriteString(fmt.Sprintf("  %s %s\n", c.gray, line.Content))
-			b.WriteString(fmt.Sprintf("  %s %s\n", c.gray, line.NewContent))
+			b.WriteString(fmt.Sprintf("%s %s\n", c.gray, line.Content))
+			b.WriteString(fmt.Sprintf("%s %s\n", c.gray, line.NewContent))
 			return
 		}
-		b.WriteString(fmt.Sprintf("  %s %s\n", c.gray, line.Content))
+		b.WriteString(fmt.Sprintf("%s %s\n", c.gray, line.Content))
 	}
 }
 
@@ -531,7 +531,7 @@ func (r *TextReporter) writeWordDiffLine(b *strings.Builder, c color, line *ir.D
 	if line.Type == ir.DiffLineAdded {
 		prefix = "+"
 	}
-	b.WriteString(fmt.Sprintf("  %s%s%s ", c.gray, prefix, c.reset))
+	b.WriteString(fmt.Sprintf("%s%s%s", c.gray, prefix, c.reset))
 	for _, w := range line.Words {
 		switch w.Type {
 		case ir.DiffWordAdded:
@@ -551,7 +551,7 @@ func (r *TextReporter) writeSource(b *strings.Builder, c color, source string, c
 			continue
 		}
 		r.recordContent(side, line)
-		b.WriteString(fmt.Sprintf("  %s%s %s\n", col, prefix, line))
+		b.WriteString(fmt.Sprintf("%s%s%s%s\n", col, prefix, c.reset, line))
 	}
 }
 
@@ -572,7 +572,7 @@ func (r *TextReporter) writeContextSource(b *strings.Builder, c color, p *ir.Cor
 				continue
 			}
 			r.recordContent(side, line)
-			b.WriteString(fmt.Sprintf("  %s %s\n", c.gray, line))
+			b.WriteString(fmt.Sprintf("%s %s\n", c.gray, line))
 		}
 	}
 	oldSet := map[string]bool{}
