@@ -76,9 +76,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 func runSemanticReview(cf compareFlags, summary, skipUnchanged bool, addedStyle, removedStyle string, oldSrc, newSrc string, stdout io.Writer) error {
 	// Build pipeline with full context (the coverage supplement needs complete line representation).
 	d := diff.NewWithOpts(diff.Options{
-		WordDiff:    cf.wordDiff,
-		IgnoreSpace: cf.ignoreSpace,
-		FullContext: true,
+		WordDiff:              cf.wordDiff,
+		WordDiffSpanThreshold: cf.wordDiffSpanThreshold,
+		IgnoreSpace:           cf.ignoreSpace,
+		FullContext:           true,
 	})
 
 	// Detect language support first: an unsupported side falls back without being parsed.
@@ -159,8 +160,9 @@ func runSemanticReview(cf compareFlags, summary, skipUnchanged bool, addedStyle,
 // runSimpleDiff emits a plain whole-file line diff, skipping the semantic pipeline entirely.
 func runSimpleDiff(cf compareFlags, summary, skipUnchanged bool, addedStyle, removedStyle string, oldSrc, newSrc string, stdout io.Writer) error {
 	d := diff.NewWithOpts(diff.Options{
-		WordDiff:    cf.wordDiff,
-		IgnoreSpace: cf.ignoreSpace,
+		WordDiff:              cf.wordDiff,
+		WordDiffSpanThreshold: cf.wordDiffSpanThreshold,
+		IgnoreSpace:           cf.ignoreSpace,
 	})
 	inner := d.DiffFull(oldSrc, newSrc)
 	return writeReport(stdout, report.Options{
@@ -316,6 +318,9 @@ Flags:
   --summary               Show only summary statistics
   --skip-unchanged        Suppress entirely unchanged components
   --word-diff             Highlight intra-line word changes
+  --word-diff-span-threshold <frac>  Collapse word diff to one span when more than
+                            this fraction of a line's words changed (default: 0.4;
+                            negative: never collapse)
   --ignore-all-space      Ignore whitespace when comparing lines
   --added-style white|green  How to color added blocks: 'white' (only '+' green, body white, default, readable) or 'green' (entire line green)
   --removed-style white|red  How to color removed blocks: 'white' (only '-' red, body white, default) or 'red' (entire line red)

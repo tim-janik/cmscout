@@ -5,17 +5,20 @@ package main
 import (
 	"flag"
 	"fmt"
+
+	"cmdiff/pkg/diff"
 )
 
 // compareFlags holds display names, -B/-A content redirection, and output options.
 type compareFlags struct {
-	oldName     string // display name (also content source if -B not given)
-	newName     string // display name (also content source if -A not given)
-	beforeFile  string // -B / --before-contents: read old content from this path
-	afterFile   string // -A / --after-contents: read new content from this path
-	noColor     bool
-	wordDiff    bool
-	ignoreSpace bool
+	oldName               string // display name (also content source if -B not given)
+	newName               string // display name (also content source if -A not given)
+	beforeFile            string // -B / --before-contents: read old content from this path
+	afterFile             string // -A / --after-contents: read new content from this path
+	noColor               bool
+	wordDiff              bool
+	wordDiffSpanThreshold float64
+	ignoreSpace           bool
 }
 
 // register binds the shared flags onto a command FlagSet.
@@ -28,6 +31,8 @@ func (cf *compareFlags) register(fs *flag.FlagSet) {
 	fs.StringVar(&cf.afterFile, "after-contents", "", "read new content from this file (default: same as new name)")
 	fs.BoolVar(&cf.noColor, "no-color", false, "disable ANSI colors")
 	fs.BoolVar(&cf.wordDiff, "word-diff", false, "highlight intra-line word changes")
+	fs.Float64Var(&cf.wordDiffSpanThreshold, "word-diff-span-threshold", diff.DefaultWordDiffSpanThreshold,
+		"collapse word diff to one span when more than this fraction of a line's words changed (negative: never collapse)")
 	fs.BoolVar(&cf.ignoreSpace, "ignore-all-space", false, "ignore whitespace when comparing lines")
 }
 

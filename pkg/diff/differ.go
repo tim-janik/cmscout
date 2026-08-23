@@ -9,11 +9,18 @@ import (
 	"cmdiff/pkg/ir"
 )
 
+// DefaultWordDiffSpanThreshold: collapse a line's word diff to one span when more than this
+// fraction of its words changed. Span policy: [../../doc/word-diff.md](word-diff.md).
+const DefaultWordDiffSpanThreshold = 0.4
+
 // Options controls diff behaviour.
 type Options struct {
 	WordDiff    bool // split into words and diff at word granularity
 	IgnoreSpace bool // ignore all whitespace when comparing lines/words
 	FullContext bool // include unchanged lines outside change hunks
+	// Fraction of changed words above which the word diff renders as one span.
+	// 0 uses DefaultWordDiffSpanThreshold; a negative value disables the collapse.
+	WordDiffSpanThreshold float64
 }
 
 // isWordBoundary reports whether a character separates words for word-level
@@ -96,7 +103,11 @@ func (d *Differ) Diff(oldSource, newSource string) *ir.DiffResult {
 
 	// Word diff runs on the original lines (even under ignore-all-space) so highlights match the file.
 	if d.opts.WordDiff {
-		applyWordDiff(hunks, oldLines, newLines)
+		threshold := d.opts.WordDiffSpanThreshold
+		if threshold == 0 {
+			threshold = DefaultWordDiffSpanThreshold
+		}
+		applyWordDiff(hunks, oldLines, newLines, d.opts.IgnoreSpace, threshold)
 	}
 
 	return &ir.DiffResult{Hunks: hunks}
@@ -110,7 +121,8 @@ func (d *Differ) DiffFull(oldSource, newSource string) *ir.DiffResult {
 }
 
 // applyWordDiff: word diffs on normalization-hidden context lines and on the added line of replacement pairs.
-func applyWordDiff(hunks []ir.DiffHunk, oldLines, newLines []string) {
+// ignoreSpace controls whether whitespace-only word differences are suppressed.
+func applyWordDiff(hunks []ir.DiffHunk, oldLines, newLines []string, ignoreSpace bool, spanThreshold float64) {
 	for hi := range hunks {
 		for li := range hunks[hi].Lines {
 			line := &hunks[hi].Lines[li]
@@ -127,8 +139,8 @@ func applyWordDiff(hunks []ir.DiffHunk, oldLines, newLines []string) {
 			if oldLine == newLine {
 				continue
 			}
-			words := computeWordDiff(oldLine, newLine)
-			if len(words) > 0 {
+			words := computeWordDiff(oldLine, newLine, ignoreSpace, spanThreshold)
+			if hasWordDiffChanges(words) {
 				line.Words = words
 				line.IsWordDiff = true
 			}
@@ -136,6 +148,7 @@ func applyWordDiff(hunks []ir.DiffHunk, oldLines, newLines []string) {
 	}
 
 	// Pair adjacent removed→added runs (replacement blocks); the added line carries the word diff.
+	// The removed line is suppressed (WordDiffPaired) so only the combined word-diff line is rendered.
 	for hi := range hunks {
 		lines := hunks[hi].Lines
 		i := 0
@@ -159,67 +172,280 @@ func applyWordDiff(hunks []ir.DiffHunk, oldLines, newLines []string) {
 			addedRun := lines[addedStart:i]
 			k := min(len(removedRun), len(addedRun))
 			for idx := 0; idx < k; idx++ {
-				words := computeWordDiff(removedRun[idx].Content, addedRun[idx].Content)
-				if len(words) > 0 {
+				words := computeWordDiff(removedRun[idx].Content, addedRun[idx].Content, ignoreSpace, spanThreshold)
+				if hasWordDiffChanges(words) {
 					addedRun[idx].Words = words
 					addedRun[idx].IsWordDiff = true
+					removedRun[idx].WordDiffPaired = true
 				}
 			}
 		}
 	}
 }
 
+// isSpaceWord reports whether a word token is purely whitespace (space, tab, etc.).
+func isSpaceWord(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r != ' ' && r != '\t' && r != '\n' && r != '\r' {
+			return false
+		}
+	}
+	return true
+}
+
+// hasWordDiffChanges reports whether a word diff contains any added or removed words.
+func hasWordDiffChanges(words []ir.DiffWord) bool {
+	for _, w := range words {
+		if w.Type == ir.DiffWordAdded || w.Type == ir.DiffWordRemoved {
+			return true
+		}
+	}
+	return false
+}
+
 // computeWordDiff computes a word-level diff between two lines.
-func computeWordDiff(oldLine, newLine string) []ir.DiffWord {
+// When ignoreSpace is true, whitespace-only word differences are suppressed
+// (they are treated as context, so ~<TAB>~ is not emitted for whitespace-only changes).
+//
+// Changed words are consolidated into consecutive spans (git --word-diff
+// style): each maximal run of changed words renders as ONE removed span and
+// ONE added span, with common prefix/suffix words trimmed to context. When
+// more than spanThreshold of the line's words changed, all runs merge into a
+// single span covering the whole changed range.
+func computeWordDiff(oldLine, newLine string, ignoreSpace bool, spanThreshold float64) []ir.DiffWord {
 	oldWords := splitWords(oldLine)
 	newWords := splitWords(newLine)
 
-	lcs := computeLCS(oldWords, newWords)
-	oldDiff, newDiff := backtrackWord(lcs, oldWords, newWords)
-
-	var result []ir.DiffWord
-	wi, wj := 0, 0
-	for wi < len(oldDiff) || wj < len(newDiff) {
-		if wi < len(oldDiff) && wj < len(newDiff) &&
-			oldDiff[wi].Type == opContext && newDiff[wj].Type == opContext &&
-			oldDiff[wi].Content == newDiff[wj].Content {
-			result = append(result, ir.DiffWord{
-				Text: oldDiff[wi].Content,
-				Type: ir.DiffWordContext,
-			})
-			wi++
-			wj++
-		} else if wj < len(newDiff) && newDiff[wj].Type == opAdd {
-			result = append(result, ir.DiffWord{
-				Text: newDiff[wj].Content,
-				Type: ir.DiffWordAdded,
-			})
-			wj++
-		} else if wi < len(oldDiff) && oldDiff[wi].Type == opDel {
-			result = append(result, ir.DiffWord{
-				Text: oldDiff[wi].Content,
-				Type: ir.DiffWordRemoved,
-			})
-			wi++
-		} else {
-			// Mismatch — treat as context to avoid infinite loop
-			if wi < len(oldDiff) {
-				result = append(result, ir.DiffWord{
-					Text: oldDiff[wi].Content,
-					Type: ir.DiffWordContext,
-				})
-				wi++
+	// For LCS comparison, normalize whitespace tokens when ignoring space:
+	// all whitespace tokens become a single canonical space so they match.
+	normalize := func(words []string) []string {
+		if !ignoreSpace {
+			return words
+		}
+		norm := make([]string, len(words))
+		for i, w := range words {
+			if isSpaceWord(w) {
+				norm[i] = " "
+			} else {
+				norm[i] = w
 			}
-			if wj < len(newDiff) {
-				result = append(result, ir.DiffWord{
-					Text: newDiff[wj].Content,
-					Type: ir.DiffWordContext,
-				})
-				wj++
+		}
+		return norm
+	}
+	oldNorm := normalize(oldWords)
+	newNorm := normalize(newWords)
+
+	// Single-pass LCS walk emitting removed-before-added at each change site,
+	// instead of merging two separate diffs out of order.
+	lcs := computeLCS(oldNorm, newNorm)
+	i, j := len(oldWords), len(newWords)
+	// Build reversed result then reverse at end.
+	var rev []ir.DiffWord
+	for i > 0 || j > 0 {
+		if i > 0 && j > 0 && oldNorm[i-1] == newNorm[j-1] {
+			rev = append(rev, ir.DiffWord{Text: oldWords[i-1], Type: ir.DiffWordContext, Side: ir.DiffWordSideBoth})
+			i--
+			j--
+		} else if j > 0 && (i == 0 || lcs[i][j-1] >= lcs[i-1][j]) {
+			// Insertion in new (added)
+			if ignoreSpace && isSpaceWord(newWords[j-1]) {
+				// New-side-only whitespace: context, but must not leak into
+				// the removed span during consolidation.
+				rev = append(rev, ir.DiffWord{Text: newWords[j-1], Type: ir.DiffWordContext, Side: ir.DiffWordSideNew})
+			} else {
+				rev = append(rev, ir.DiffWord{Text: newWords[j-1], Type: ir.DiffWordAdded})
+			}
+			j--
+		} else if i > 0 {
+			if ignoreSpace && isSpaceWord(oldWords[i-1]) {
+				rev = append(rev, ir.DiffWord{Text: oldWords[i-1], Type: ir.DiffWordContext, Side: ir.DiffWordSideOld})
+			} else {
+				rev = append(rev, ir.DiffWord{Text: oldWords[i-1], Type: ir.DiffWordRemoved})
+			}
+			i--
+		}
+	}
+	// Reverse to get correct order.
+	for l, r := 0, len(rev)-1; l < r; l, r = l+1, r-1 {
+		rev[l], rev[r] = rev[r], rev[l]
+	}
+	// Words are compared the same way the LCS compared them: under
+	// ignoreSpace all whitespace tokens are one canonical word.
+	equal := func(a, b string) bool {
+		if ignoreSpace && isSpaceWord(a) && isSpaceWord(b) {
+			return true
+		}
+		return a == b
+	}
+	return coalesceWordSpans(rev, spanThreshold, ignoreSpace, equal)
+}
+
+// isBothContextWord reports whether a word is context present in both lines; one-sided words
+// (whitespace under ignore-all-space) stay inside changed spans instead of splitting them.
+func isBothContextWord(w ir.DiffWord) bool {
+	return w.Type == ir.DiffWordContext && w.Side == ir.DiffWordSideBoth
+}
+
+// isRegionBreak: a word that separates changed regions. Common whitespace never breaks one:
+// short changed tokens like "+" would otherwise render as isolated unreadable marks.
+func isRegionBreak(w ir.DiffWord, ignoreSpace bool) bool {
+	return isBothContextWord(w) && !(ignoreSpace && isSpaceWord(w.Text))
+}
+
+// coalesceWordSpans collapses per-word changes into consecutive removed+added spans with
+// context trimmed; past spanThreshold all runs merge into one span (negative disables).
+func coalesceWordSpans(words []ir.DiffWord, spanThreshold float64, ignoreSpace bool, equal func(a, b string) bool) []ir.DiffWord {
+	changed, realChanged := 0, 0
+	for _, w := range words {
+		if !isBothContextWord(w) {
+			changed++
+			if w.Type != ir.DiffWordContext {
+				realChanged++
 			}
 		}
 	}
-	return result
+	if realChanged == 0 {
+		return words // whitespace-only differences stay plain context
+	}
+	// A mostly-rewritten line reads better as one consecutive span than as many small
+	// fragments; collapseWordSpan keeps leading and trailing context.
+	if spanThreshold >= 0 && float64(changed)/float64(len(words)) > spanThreshold {
+		return collapseWordSpan(words, 0, len(words), ignoreSpace, equal)
+	}
+	var out []ir.DiffWord
+	for i := 0; i < len(words); {
+		if isRegionBreak(words[i], ignoreSpace) {
+			out = append(out, words[i])
+			i++
+			continue
+		}
+		j := i
+		for j < len(words) && !isRegionBreak(words[j], ignoreSpace) {
+			j++
+		}
+		out = append(out, collapseWordSpan(words, i, j, ignoreSpace, equal)...)
+		i = j
+	}
+	return out
+}
+
+// collapseWordSpan turns [start,end) into trimmed context prefix/suffix around at most one
+// removed and one added span; edge whitespace re-emits as one plain space per side that had it.
+func collapseWordSpan(words []ir.DiffWord, start, end int, ignoreSpace bool, equal func(a, b string) bool) []ir.DiffWord {
+	var removed, added []ir.DiffWord
+	for _, w := range words[start:end] {
+		switch w.Type {
+		case ir.DiffWordRemoved:
+			removed = append(removed, w)
+		case ir.DiffWordAdded:
+			added = append(added, w)
+		default:
+			// One-sided context words (whitespace under ignore-all-space)
+			// must not leak into the other side's span.
+			switch w.Side {
+			case ir.DiffWordSideNew:
+				added = append(added, w)
+			case ir.DiffWordSideOld:
+				removed = append(removed, w)
+			default:
+				removed = append(removed, w)
+				added = append(added, w)
+			}
+		}
+	}
+	// Trim common prefix, then common suffix (never overlapping the prefix).
+	prefix := 0
+	for prefix < len(removed) && prefix < len(added) && equal(removed[prefix].Text, added[prefix].Text) {
+		prefix++
+	}
+	suffix := 0
+	for suffix < len(removed)-prefix && suffix < len(added)-prefix &&
+		equal(removed[len(removed)-1-suffix].Text, added[len(added)-1-suffix].Text) {
+		suffix++
+	}
+	removedMid := removed[prefix : len(removed)-suffix]
+	addedMid := added[prefix : len(added)-suffix]
+	var leadOld, leadNew, midOld, midNew, trailOld, trailNew bool
+	if ignoreSpace {
+		removedMid, addedMid, leadOld, leadNew, midOld, midNew, trailOld, trailNew = stripSpanEdgeWhitespace(removedMid, addedMid)
+	}
+	out := make([]ir.DiffWord, 0, prefix+suffix+4)
+	appendJunction := func(both, old, new bool) {
+		switch {
+		case both:
+			out = append(out, ir.DiffWord{Text: " ", Type: ir.DiffWordContext, Side: ir.DiffWordSideBoth})
+		case old:
+			out = append(out, ir.DiffWord{Text: " ", Type: ir.DiffWordContext, Side: ir.DiffWordSideOld})
+		case new:
+			out = append(out, ir.DiffWord{Text: " ", Type: ir.DiffWordContext, Side: ir.DiffWordSideNew})
+		}
+	}
+	for _, w := range removed[:prefix] {
+		out = append(out, ir.DiffWord{Text: w.Text, Type: ir.DiffWordContext, Side: ir.DiffWordSideBoth})
+	}
+	appendJunction(leadOld && leadNew, leadOld, leadNew)
+	if len(removedMid) > 0 {
+		out = append(out, ir.DiffWord{Text: joinWords(removedMid), Type: ir.DiffWordRemoved})
+	}
+	appendJunction(midOld && midNew, midOld, midNew)
+	if len(addedMid) > 0 {
+		out = append(out, ir.DiffWord{Text: joinWords(addedMid), Type: ir.DiffWordAdded})
+	}
+	appendJunction(trailOld && trailNew, trailOld, trailNew)
+	for _, w := range removed[len(removed)-suffix:] {
+		out = append(out, ir.DiffWord{Text: w.Text, Type: ir.DiffWordContext, Side: ir.DiffWordSideBoth})
+	}
+	return out
+}
+
+// stripSpanEdgeWhitespace trims context whitespace from the span edges and re-emits one plain
+// space per junction ("~ ~" fragments are noise under ignore-all-space). Each junction space is
+// one-sided: only the side(s) that actually had whitespace there get it back, so the other side
+// keeps its exact text.
+func stripSpanEdgeWhitespace(removed, added []ir.DiffWord) (rm, am []ir.DiffWord, leadOld, leadNew, midOld, midNew, trailOld, trailNew bool) {
+	stripLead := func(list []ir.DiffWord) ([]ir.DiffWord, bool) {
+		n := 0
+		for n < len(list) && list[n].Type == ir.DiffWordContext && isSpaceWord(list[n].Text) {
+			n++
+		}
+		return list[n:], n > 0
+	}
+	stripTrail := func(list []ir.DiffWord) ([]ir.DiffWord, bool) {
+		n := len(list)
+		for n > 0 && list[n-1].Type == ir.DiffWordContext && isSpaceWord(list[n-1].Text) {
+			n--
+		}
+		return list[:n], n < len(list)
+	}
+	var rLead, rTrail, aLead, aTrail bool
+	removed, rLead = stripLead(removed)
+	removed, rTrail = stripTrail(removed)
+	added, aLead = stripLead(added)
+	added, aTrail = stripTrail(added)
+	// Lead junction: old-side space when the removed span began with whitespace; new-side on a
+	// pure insertion (no removed words) whose added span began with whitespace.
+	leadOld = rLead
+	leadNew = len(removed) == 0 && aLead
+	// Mid junction between the removed and added spans: each side re-emits its own edge whitespace.
+	midOld = rTrail && len(removed) > 0 && len(added) > 0
+	midNew = aLead && len(removed) > 0 && len(added) > 0
+	// Trail junction: new-side space when the added span ended with whitespace; old-side on a
+	// pure deletion (no added words) whose removed span ended with whitespace.
+	trailOld = len(added) == 0 && rTrail
+	trailNew = aTrail
+	return removed, added, leadOld, leadNew, midOld, midNew, trailOld, trailNew
+}
+
+// joinWords concatenates word texts into a single span.
+func joinWords(words []ir.DiffWord) string {
+	var b strings.Builder
+	for _, w := range words {
+		b.WriteString(w.Text)
+	}
+	return b.String()
 }
 
 // backtrackWord: rebuild ops from the LCS table, appended in reverse (avoids quadratic prepending).

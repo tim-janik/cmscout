@@ -465,3 +465,244 @@ func TestDiff_ReconstructSequences(t *testing.T) {
 	result := d.Diff("a\nb\nb\nc", "a\nb\nc\nc")
 	assertSequences(t, result, []string{"a", "b", "b", "c"}, []string{"a", "b", "c", "c"})
 }
+
+// renderWords renders a word diff with ~removed~ / +added+ markers.
+func renderWords(words []ir.DiffWord) string {
+	var b strings.Builder
+	for _, w := range words {
+		switch w.Type {
+		case ir.DiffWordRemoved:
+			b.WriteString("~" + w.Text + "~")
+		case ir.DiffWordAdded:
+			b.WriteString("+" + w.Text + "+")
+		default:
+			b.WriteString(w.Text)
+		}
+	}
+	return b.String()
+}
+
+// reconstructSides rebuilds both lines from a word diff: removed words and old-side context
+// belong to the old line, added words and new-side context to the new. Both must match input.
+func reconstructSides(words []ir.DiffWord) (old, new string) {
+	var ob, nb strings.Builder
+	for _, w := range words {
+		switch w.Type {
+		case ir.DiffWordRemoved:
+			ob.WriteString(w.Text)
+		case ir.DiffWordAdded:
+			nb.WriteString(w.Text)
+		default:
+			if w.Side != ir.DiffWordSideNew {
+				ob.WriteString(w.Text)
+			}
+			if w.Side != ir.DiffWordSideOld {
+				nb.WriteString(w.Text)
+			}
+		}
+	}
+	return ob.String(), nb.String()
+}
+
+// TestComputeWordDiff_RegionConsolidation: each changed region renders as
+// ONE removed span and ONE added span instead of per-word markup.
+func TestComputeWordDiff_RegionConsolidation(t *testing.T) {
+	words := computeWordDiff("const x = 1;", "const y = 2;", false, DefaultWordDiffSpanThreshold)
+	want := "const ~x~+y+ = ~1~+2+;"
+	if got := renderWords(words); got != want {
+		t.Errorf("render = %q, want %q", got, want)
+	}
+	old, new := reconstructSides(words)
+	if old != "const x = 1;" || new != "const y = 2;" {
+		t.Errorf("reconstruction = %q / %q, want both inputs", old, new)
+	}
+}
+
+// TestComputeWordDiff_MultiWordInsertion: an inserted run of words becomes
+// a single added span, including its one-sided whitespace.
+func TestComputeWordDiff_MultiWordInsertion(t *testing.T) {
+	words := computeWordDiff("vimage_round_pixels (const VImage &img)",
+		"vimage_round_pixels (const VImage &img, VipsBandFormat format)", true, DefaultWordDiffSpanThreshold)
+	want := "vimage_round_pixels (const VImage &img+, VipsBandFormat format+)"
+	if got := renderWords(words); got != want {
+		t.Errorf("render = %q, want %q", got, want)
+	}
+	old, new := reconstructSides(words)
+	if old != "vimage_round_pixels (const VImage &img)" ||
+		new != "vimage_round_pixels (const VImage &img, VipsBandFormat format)" {
+		t.Errorf("reconstruction = %q / %q, want both inputs", old, new)
+	}
+}
+
+// TestComputeWordDiff_SpanThreshold: above the threshold a line collapses to
+// one consecutive span; below it, each changed region stays separate.
+func TestComputeWordDiff_SpanThreshold(t *testing.T) {
+	// 6 of 14 words changed (43%): collapses at both 0.2 and the default 0.4.
+	oldLine := "alpha one beta two gamma three"
+	newLine := "ALPHA one BETA two GAMMA three"
+
+	for _, threshold := range []float64{0.2, DefaultWordDiffSpanThreshold} {
+		collapsed := computeWordDiff(oldLine, newLine, false, threshold)
+		want := "~alpha one beta two gamma~+ALPHA one BETA two GAMMA+ three"
+		if got := renderWords(collapsed); got != want {
+			t.Errorf("threshold %v render = %q, want %q", threshold, got, want)
+		}
+		old, new := reconstructSides(collapsed)
+		if old != oldLine || new != newLine {
+			t.Errorf("threshold %v reconstruction = %q / %q, want both inputs", threshold, old, new)
+		}
+	}
+
+	// 4 of 23 words changed (17%): stays per-region at the default threshold.
+	oldLine = "the quick brown fox jumps over the lazy dog"
+	newLine = "the quick brown FOX jumps over the lazy DOG"
+	separate := computeWordDiff(oldLine, newLine, false, DefaultWordDiffSpanThreshold)
+	wantSeparate := "the quick brown ~fox~+FOX+ jumps over the lazy ~dog~+DOG+"
+	if got := renderWords(separate); got != wantSeparate {
+		t.Errorf("default threshold render = %q, want %q", got, wantSeparate)
+	}
+	old, new := reconstructSides(separate)
+	if old != oldLine || new != newLine {
+		t.Errorf("default threshold reconstruction = %q / %q, want both inputs", old, new)
+	}
+}
+
+// TestComputeWordDiff_SpanThresholdDisabled: a negative threshold keeps
+// per-region spans even when more than 40% of the line changed.
+func TestComputeWordDiff_SpanThresholdDisabled(t *testing.T) {
+	oldLine := "alpha one beta two gamma three"
+	newLine := "ALPHA one BETA two GAMMA three"
+	words := computeWordDiff(oldLine, newLine, false, -1)
+	want := "~alpha~+ALPHA+ one ~beta~+BETA+ two ~gamma~+GAMMA+ three"
+	if got := renderWords(words); got != want {
+		t.Errorf("render = %q, want %q", got, want)
+	}
+	old, new := reconstructSides(words)
+	if old != oldLine || new != newLine {
+		t.Errorf("reconstruction = %q / %q, want both inputs", old, new)
+	}
+}
+
+// TestComputeWordDiff_TrimmedEdges: equal words at the edges of a changed
+// region stay plain context.
+func TestComputeWordDiff_TrimmedEdges(t *testing.T) {
+	words := computeWordDiff("foo(bar)", "foo(baz)", false, DefaultWordDiffSpanThreshold)
+	if got := renderWords(words); got != "foo(~bar~+baz+)" {
+		t.Errorf("render = %q, want %q", got, "foo(~bar~+baz+)")
+	}
+}
+
+// TestComputeWordDiff_WhitespaceOnly: under ignore-all-space a
+// whitespace-only difference carries no changed words at all.
+func TestComputeWordDiff_WhitespaceOnly(t *testing.T) {
+	words := computeWordDiff("a b", "a  b", true, DefaultWordDiffSpanThreshold)
+	if hasWordDiffChanges(words) {
+		t.Errorf("whitespace-only difference must have no changed words: %+v", words)
+	}
+	if got := renderWords(words); got != "a  b" {
+		t.Errorf("render = %q, want plain text", got)
+	}
+}
+
+// TestComputeWordDiff_OneSidedJunctionSpace: junction spaces under ignore-all-space are
+// one-sided — only the side that had the whitespace gets it back, so the other side's
+// text is not corrupted with a spurious space.
+func TestComputeWordDiff_OneSidedJunctionSpace(t *testing.T) {
+	for _, c := range []struct{ old, new string }{
+		{"a x ", "a y"}, // old-only trailing whitespace at the junction
+		{"a x", "a y "}, // new-only trailing whitespace
+		{" x", "y"},     // old-only leading whitespace
+		{"a x", " y"},   // new-only leading whitespace
+	} {
+		words := computeWordDiff(c.old, c.new, true, DefaultWordDiffSpanThreshold)
+		old, new := reconstructSides(words)
+		if old != c.old || new != c.new {
+			t.Errorf("reconstruction = %q / %q, want %q / %q (words: %s)", old, new, c.old, c.new, renderWords(words))
+		}
+	}
+}
+
+// TestWordDiff_RewrittenFunctionIsReadable: a mostly-rewritten body renders at most one removed
+// and one added span per line at the default threshold; per-word markup was the original complaint.
+func TestWordDiff_RewrittenFunctionIsReadable(t *testing.T) {
+	oldSrc := `// Quantize samples to 8-bit by rounding halves up
+static Buffer
+quantize (const Buffer &buf)
+{
+  // Add 0.5 to round to nearest integer when converting to 8-bit unsigned integer
+  Buffer out = (buf + 0.5).cast (FORMAT_U8);
+  return out;
+}`
+	newSrc := `// Quantize samples into the target format, preserving the input depth
+static Buffer
+quantize (const Buffer &buf, SampleFormat fmt)
+{
+  // Floating point formats are normalized back into [0,1] without rounding
+  if (fmt == FORMAT_F32 || fmt == FORMAT_F64)
+    return (buf / 255.0).cast (fmt);
+  const double scale = format_scale (fmt);
+  Buffer scaled = scale == 1.0 ? buf : buf / scale;
+  Buffer out = (scaled + 0.5).cast (fmt);
+  return out;
+}`
+
+	d := NewWithOpts(Options{WordDiff: true, IgnoreSpace: true})
+	result := d.DiffFull(oldSrc, newSrc)
+
+	wordDiffLines := 0
+	for _, h := range result.Hunks {
+		for _, l := range h.Lines {
+			if !l.IsWordDiff {
+				continue
+			}
+			wordDiffLines++
+			removedSpans, addedSpans := 0, 0
+			prevType := ir.DiffWordContext
+			for _, w := range l.Words {
+				switch w.Type {
+				case ir.DiffWordRemoved:
+					if prevType == ir.DiffWordRemoved {
+						t.Errorf("adjacent removed words not consolidated: %+v", l.Words)
+					}
+					removedSpans++
+				case ir.DiffWordAdded:
+					if prevType == ir.DiffWordAdded {
+						t.Errorf("adjacent added words not consolidated: %+v", l.Words)
+					}
+					addedSpans++
+				}
+				prevType = w.Type
+			}
+			if removedSpans > 1 || addedSpans > 1 {
+				t.Errorf("rewritten line must render as at most one span per side at the default threshold, got %d removed / %d added: %s", removedSpans, addedSpans, renderWords(l.Words))
+			}
+		}
+	}
+	if wordDiffLines == 0 {
+		t.Fatal("expected word-diff lines in the rewritten function")
+	}
+}
+
+// TestComputeWordDiff_ShortTokensCoalesce: single-character changes merge with neighboring
+// words into one span per side; whitespace under ignore-all-space does not split regions.
+func TestComputeWordDiff_ShortTokensCoalesce(t *testing.T) {
+	oldLine := "val = (img + 0.5);"
+	newLine := "val = (img / 255.0);"
+	words := computeWordDiff(oldLine, newLine, true, DefaultWordDiffSpanThreshold)
+	want := "val = (img ~+ 0.5~+/ 255.0+);"
+	if got := renderWords(words); got != want {
+		t.Errorf("render = %q, want %q", got, want)
+	}
+}
+
+// TestComputeWordDiff_OperatorAndIdentifiers: rewritten conversion lines render one span per
+// side, not fragmented single-word marks ('VImage result =', '+ 0.5' vs '/ 255.0').
+func TestComputeWordDiff_OperatorAndIdentifiers(t *testing.T) {
+	oldLine := "  VImage result = (img + 0.5).cast (VIPS_FORMAT_UCHAR);"
+	newLine := "    return (img / 255.0).cast (format);"
+	words := computeWordDiff(oldLine, newLine, true, DefaultWordDiffSpanThreshold)
+	want := "  ~VImage result =~ +return+ (img ~+ 0.5~+/ 255.0+).cast (~VIPS_FORMAT_UCHAR~+format+);"
+	if got := renderWords(words); got != want {
+		t.Errorf("render = %q, want %q", got, want)
+	}
+}

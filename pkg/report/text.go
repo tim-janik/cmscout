@@ -13,6 +13,24 @@ import (
 	"cmdiff/pkg/matching"
 )
 
+// WordDiffStyle configures markers and colors for word-level highlights; fields are editable,
+// e.g. "{+"/"+}" instead of "+"/"~". Defaults and examples: [../../doc/word-diff.md](word-diff.md).
+var WordDiffStyle = struct {
+	AddedPrefix   string
+	AddedSuffix   string
+	RemovedPrefix string
+	RemovedSuffix string
+	AddedColor    string
+	RemovedColor  string
+}{
+	AddedPrefix:   "+",
+	AddedSuffix:   "+",
+	RemovedPrefix: "~",
+	RemovedSuffix: "~",
+	AddedColor:    "green",
+	RemovedColor:  "red",
+}
+
 // TextReporter renders a text-based review report.
 type TextReporter struct {
 	Opts Options
@@ -465,6 +483,12 @@ func (r *TextReporter) writeDiffLine(b *strings.Builder, c color, line *ir.DiffL
 		}
 		b.WriteString(fmt.Sprintf("%s+%s%s\n", c.green, c.reset, line.Content))
 	case ir.DiffLineRemoved:
+		// Word-diff paired removed lines are suppressed: the added line's
+		// combined word diff already shows the removed words inline.
+		if line.WordDiffPaired {
+			r.recordContent(oldSide, line.Content)
+			return
+		}
 		if r.suppress && r.shouldSuppressSide(oldSide, line.Content, line.OldNo, false) {
 			return
 		}
@@ -525,19 +549,46 @@ func (r *TextReporter) supplementLineAlreadyShown(line *ir.DiffLine) bool {
 	}
 }
 
-// writeWordDiffLine: green added / red ~removed~ / plain context words; prefix matches line type.
+// wordDiffColor resolves a WordDiffStyle color name to the actual ANSI code.
+func wordDiffColor(c color, name string, fallback string) string {
+	switch strings.ToLower(name) {
+	case "red":
+		return c.red
+	case "green":
+		return c.green
+	case "yellow":
+		return c.yellow
+	case "cyan":
+		return c.cyan
+	case "magenta":
+		return c.magenta
+	case "gray", "grey":
+		return c.gray
+	case "bold":
+		return c.bold
+	case "":
+		return fallback
+	default:
+		return fallback
+	}
+}
+
+// writeWordDiffLine renders word-level highlights using WordDiffStyle markers and colors;
+// the line prefix matches the line type (" " context, "+" added).
 func (r *TextReporter) writeWordDiffLine(b *strings.Builder, c color, line *ir.DiffLine) {
 	prefix := " "
 	if line.Type == ir.DiffLineAdded {
 		prefix = "+"
 	}
 	b.WriteString(fmt.Sprintf("%s%s%s", c.gray, prefix, c.reset))
+	addedColor := wordDiffColor(c, WordDiffStyle.AddedColor, c.green)
+	removedColor := wordDiffColor(c, WordDiffStyle.RemovedColor, c.red)
 	for _, w := range line.Words {
 		switch w.Type {
 		case ir.DiffWordAdded:
-			b.WriteString(fmt.Sprintf("%s%s%s", c.green, w.Text, c.reset))
+			b.WriteString(fmt.Sprintf("%s%s%s%s%s", addedColor, WordDiffStyle.AddedPrefix, w.Text, WordDiffStyle.AddedSuffix, c.reset))
 		case ir.DiffWordRemoved:
-			b.WriteString(fmt.Sprintf("%s~%s~%s", c.red, w.Text, c.reset))
+			b.WriteString(fmt.Sprintf("%s%s%s%s%s", removedColor, WordDiffStyle.RemovedPrefix, w.Text, WordDiffStyle.RemovedSuffix, c.reset))
 		default:
 			b.WriteString(w.Text)
 		}
