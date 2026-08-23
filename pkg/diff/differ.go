@@ -448,30 +448,6 @@ func joinWords(words []ir.DiffWord) string {
 	return b.String()
 }
 
-// backtrackWord: rebuild ops from the LCS table, appended in reverse (avoids quadratic prepending).
-func backtrackWord(lcs [][]int, a, b []string) ([]diffOp, []diffOp) {
-	var oldDiff, newDiff []diffOp
-	i := len(a)
-	j := len(b)
-	for i > 0 || j > 0 {
-		if i > 0 && j > 0 && a[i-1] == b[j-1] {
-			oldDiff = append(oldDiff, diffOp{Type: opContext, Content: a[i-1]})
-			newDiff = append(newDiff, diffOp{Type: opContext, Content: b[j-1]})
-			i--
-			j--
-		} else if j > 0 && (i == 0 || lcs[i][j-1] >= lcs[i-1][j]) {
-			newDiff = append(newDiff, diffOp{Type: opAdd, Content: b[j-1]})
-			j--
-		} else {
-			oldDiff = append(oldDiff, diffOp{Type: opDel, Content: a[i-1]})
-			i--
-		}
-	}
-	reverseOps(oldDiff)
-	reverseOps(newDiff)
-	return oldDiff, newDiff
-}
-
 // splitLines splits source text into individual lines.
 func splitLines(s string) []string {
 	if s == "" {
