@@ -754,7 +754,7 @@ func TestMatchBlocks_CustomThresholdTrueSimilarity(t *testing.T) {
 // matched container must never be paired against a code child, even at
 // threshold 0 where every eligible edge is admitted. Hierarchical
 // code-child candidate lists exclude comments, so the comment reaches only
-// the exact-comment stage and the comment-only similarity table (F9).
+// the exact-comment stage and the comment-only similarity table.
 func TestMatchBlocks_HierarchyExcludesComments(t *testing.T) {
 	mk := func(id string, kind ir.BlockKind, name, parent, src string) ir.SemanticBlock {
 		return ir.SemanticBlock{ID: id, Kind: kind, Name: name, Parent: parent, Source: src}
@@ -797,7 +797,7 @@ func TestMatchBlocks_HierarchyExcludesComments(t *testing.T) {
 // TestMatchBlocks_CommentPairsWithCommentNotCode: a reworded comment
 // nested under a matched container pairs with its reworded counterpart via
 // the comment-only similarity table even when a code child with nearly
-// identical text exists on the new side (F9).
+// identical text exists on the new side.
 func TestMatchBlocks_CommentPairsWithCommentNotCode(t *testing.T) {
 	mk := func(id string, kind ir.BlockKind, name, parent, src string) ir.SemanticBlock {
 		return ir.SemanticBlock{ID: id, Kind: kind, Name: name, Parent: parent, Source: src}

@@ -20,7 +20,7 @@ type TextReporter struct {
 	// seen: rendered lines by side+content (old removed ≠ new added obligations).
 	seen map[contentKey]string
 
-	// seenTrim: trimmed content for the supplement's indentation-aware comment de-dup (F11).
+	// seenTrim: trimmed content for the supplement's indentation-aware comment de-dup.
 	seenTrim map[contentKey]string
 
 	// pairID/pairSeq: repeats allowed within a pair, de-duplicated across pairs.
@@ -34,7 +34,7 @@ type TextReporter struct {
 	coveredOld map[int]bool
 	coveredNew map[int]bool
 
-	// coveredCommentOld/coveredCommentNew: rendered comment spans — ownership required before indentation-aware suppression (F11).
+	// coveredCommentOld/coveredCommentNew: rendered comment spans — ownership required before indentation-aware suppression.
 	coveredCommentOld map[int]bool
 	coveredCommentNew map[int]bool
 

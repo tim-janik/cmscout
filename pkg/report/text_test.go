@@ -638,7 +638,7 @@ func TestTextReport_MovedCounter(t *testing.T) {
 }
 
 // commentMovementReport builds a report for a matched comment pair whose
-// enclosing container changed (F11). It mirrors the real pipeline's shape:
+// enclosing container changed. It mirrors the real pipeline's shape:
 // the container pairs carry their COLLAPSED sources (matched children
 // replaced by references, prefix comments absorbed), so the raw supplement
 // line of a moved comment differs from the semantic rendering only by
@@ -660,7 +660,7 @@ func commentMovementReport(t *testing.T, pairs ...ir.CorrelatedPair) string {
 // it renders with [moved], counts as Moved, and the coverage supplement
 // must NOT re-show the old indented comment line as a raw removal (its
 // only difference from the semantic rendering is indentation, and the
-// comment pair owns the line) (F11).
+// comment pair owns the line).
 func TestTextReport_CommentMovedOutOfContainer(t *testing.T) {
 	oldSrc := "class A {\n  // note\n  foo() {}\n}\n"
 	newSrc := "// note\nclass A {\n  foo() {}\n}\n"
@@ -883,7 +883,7 @@ func TestTextReport_CommentRewordedWhileMoving(t *testing.T) {
 // indented line of the OTHER identical comment stays visible in the
 // supplement: the indentation-aware de-duplication requires the comment
 // pair to OWN the line (span), so a duplicate text elsewhere is never
-// hidden (F11).
+// hidden.
 func TestTextReport_DuplicateCommentTextNotHidden(t *testing.T) {
 	oldSrc := "class A {\n  // note\n  foo() {}\n}\n// note\n"
 	newSrc := "class A {\n  foo() {}\n}\n// note\n"
@@ -1007,7 +1007,7 @@ func TestWhitespaceClassificationLexical(t *testing.T) {
 		{"identifier boundary", "return value", "returnvalue", false},
 		{"mixed formatting plus semantic", "const s = \"a b\";\n", "  const s = \"ab\";\n", false},
 
-		// Multi-character operators are single tokens (F10).
+		// Multi-character operators are single tokens.
 		{"arrow split", "(x) => x", "(x) = > x", false},
 		{"optional chain split", "a?.b", "a ? .b", false},
 		{"strict equality split", "x === y", "x = = = y", false},
@@ -1027,7 +1027,7 @@ func TestWhitespaceClassificationLexical(t *testing.T) {
 		{"go channel spacing", "a <- b", "a<-b", true},
 		{"rest spacing", "f(...args)", "f( ... args )", true},
 
-		// Regex literals are atomic; division is punctuation (F10).
+		// Regex literals are atomic; division is punctuation.
 		{"regex content", "const r = /a b/;", "const r = /ab/;", false},
 		{"regex internal spacing", "const r = /a b/;", "const r = /a  b/;", false},
 		{"regex flags spacing", "const r = /a b/g;", "const r = /a b /g;", false},
@@ -1035,18 +1035,18 @@ func TestWhitespaceClassificationLexical(t *testing.T) {
 		{"division chain", "x = a / b / c;", "x = a/b/c;", true},
 		{"regex spacing", "const r = /a/;", "const r =  /a/;", true},
 
-		// Template interpolations are tokenized structurally (F10).
+		// Template interpolations are tokenized structurally.
 		{"interpolation spacing", "const t = `a ${x} b`;", "const t = `a ${ x } b`;", true},
 		{"interpolation member spacing", "const t = `a ${x.y} b`;", "const t = `a ${x . y} b`;", true},
 		{"interpolation expression change", "const t = `a ${x} b`;", "const t = `a ${y} b`;", false},
 		{"template text change", "const t = `a ${x} b`;", "const t = `a ${x} c`;", false},
 
 		// JSX text: word changes are semantic, spacing between words is
-		// formatting (F10 decision).
+		// formatting.
 		{"jsx word join", "<div>hello world</div>", "<div>helloworld</div>", false},
 		{"jsx text spacing", "<div>hello world</div>", "<div>hello  world</div>", true},
 
-		// Bash/Go comment and string forms (F10).
+		// Bash/Go comment and string forms.
 		{"bash comment wording", "# a b", "# ab", false},
 		{"bash comment spacing is content", "# a b", "# a  b", false},
 		{"go raw string", "const s = `a b`;", "const s = `ab`;", false},
@@ -1259,7 +1259,7 @@ func TestSummary_WhitespaceClassificationLexical(t *testing.T) {
 // TestTextReport_NewContentNewBlankRendering: the report renders both raw
 // forms of an ignore-all-space context line (old via Content, new via
 // NewContent) and never presents the old text as the new text; a blank new
-// raw line (NewBlank) contributes nothing beyond the old form (F14).
+// raw line (NewBlank) contributes nothing beyond the old form.
 func TestTextReport_NewContentNewBlankRendering(t *testing.T) {
 	oldSrc := "a = 1\n   \n"
 	newSrc := "a=1\n\n"

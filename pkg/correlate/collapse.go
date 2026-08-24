@@ -93,7 +93,7 @@ func CollapseMatchedSubBlocks(result *ir.CorrelationResult) {
 		}
 	}
 
-	// Filter only unchanged comment pairs absorbed on BOTH sides; reworded or one-sided stay (F11).
+	// Filter only unchanged comment pairs absorbed on BOTH sides; reworded or one-sided stay.
 	var filtered []ir.CorrelatedPair
 	for _, p := range result.Pairs {
 		oldComment := p.Old != nil && p.Old.Kind == ir.KindComment
