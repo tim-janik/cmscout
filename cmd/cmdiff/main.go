@@ -156,6 +156,7 @@ func runSemanticReview(cf compareFlags, summary, skipUnchanged bool, addedStyle,
 		NoColor:       cf.noColor,
 		SummaryOnly:   summary,
 		SkipUnchanged: skipUnchanged,
+		IgnoreSpace:   cf.ignoreSpace,
 		AddedStyle:    addedStyle,
 		RemovedStyle:  removedStyle,
 	}, result, cf.oldName, cf.newName)
@@ -173,6 +174,7 @@ func runSimpleDiff(cf compareFlags, summary, skipUnchanged bool, addedStyle, rem
 		NoColor:       cf.noColor,
 		SummaryOnly:   summary,
 		SkipUnchanged: skipUnchanged,
+		IgnoreSpace:   cf.ignoreSpace,
 		AddedStyle:    addedStyle,
 		RemovedStyle:  removedStyle,
 	}, &ir.CorrelationResult{

@@ -73,13 +73,16 @@ type TextReporter struct {
 }
 
 // isCompletelyUnchanged: identical source, name, position ⇒ no review signal; whole-file
-// pairs ignore the name; moved pairs always render.
-func isCompletelyUnchanged(p *ir.CorrelatedPair, moved bool) bool {
+// pairs ignore the name; moved pairs always render. Under IgnoreSpace, sources that differ
+// only by whitespace the diff already normalized count as unchanged.
+func (r *TextReporter) isCompletelyUnchanged(p *ir.CorrelatedPair, moved bool) bool {
 	if p.Supplemental || p.Old == nil || p.New == nil {
 		return false
 	}
 	if p.Old.Source != p.New.Source {
-		return false
+		if !(r.Opts.IgnoreSpace && p.InnerDiff != nil && !p.InnerDiff.HasChanges()) {
+			return false
+		}
 	}
 	if p.Old.Kind != ir.KindUnknown && ((p.Old.Name != p.New.Name && !sameAnonymousNumberedName(p)) || moved) {
 		return false
@@ -265,7 +268,7 @@ func (r *TextReporter) writeGroup(b *strings.Builder, c color, kind ir.BlockKind
 func (r *TextReporter) writePair(b *strings.Builder, c color, p *ir.CorrelatedPair) {
 	r.beginPair(p)
 	// --skip-unchanged suppresses identical blocks (summary still counts them); moved blocks always render.
-	if r.Opts.SkipUnchanged && isCompletelyUnchanged(p, r.movedPairs[p]) {
+	if r.Opts.SkipUnchanged && r.isCompletelyUnchanged(p, r.movedPairs[p]) {
 		return
 	}
 	// One-sided class members render only in the class diff.
