@@ -397,9 +397,8 @@ type section struct {
 	lines  []contentLine
 }
 
-// isSectionHeader reports whether a line starts a new section in a report
-// (kind headers, "Summary", the "diff --cmdiff" header, "Other", etc.).
-// Content lines always start with "+", "-", or " ".
+// isSectionHeader reports whether a line starts a new report section (kind headers,
+// "Summary", "diff --cmdiff", "Other"); content lines always start with "+", "-", or " ".
 func isSectionHeader(line string) bool {
 	return contentLineOf(line) == nil
 }
@@ -470,10 +469,8 @@ func TestCoverageInvariant(t *testing.T) {
 	}
 }
 
-// headerPct matches a matched-pair header line and captures the displayed
-// similarity percentage:
-//
-//	"@@ -63,186 +64,118 @@  spin_drag_pointermove  100% similarity  [moved]"
+// headerPct matches a matched-pair header line and captures the displayed percentage:
+// "@@ -63,186 +64,118 @@  spin_drag_pointermove  100% similarity  [moved]"
 var headerPct = regexp.MustCompile(`^@@ -[0-9]+,[0-9]+ \+[0-9]+,[0-9]+ @@  .*  ([0-9]+)% similarity(  .*)?$`)
 
 // blockMarker matches a standalone added or removed block header.
@@ -1138,10 +1135,9 @@ func TestChangedCommentInsideMatchedContainer(t *testing.T) {
 	}
 }
 
-// TestMultiLinePrefixCommentShownWhole: a changed multi-line prefix comment must
-// attach to the following function as a whole. Each `//` line is its own tree-sitter
-// comment node; without run expansion only the last comment line would attach and
-// the start of the comment would be lost as diff context.
+// TestMultiLinePrefixCommentShownWhole: a changed multi-line prefix comment attaches to the
+// following function whole; without run expansion only the last `//` node would attach and
+// the comment start would be lost as diff context.
 func TestMultiLinePrefixCommentShownWhole(t *testing.T) {
 	skipIfNoParser(t)
 
@@ -1208,11 +1204,9 @@ func TestMultiLinePrefixCommentAdded(t *testing.T) {
 	}
 }
 
-// TestPrefixCounterpartNotCleanPrefixStaysStandalone: an added comment whose old
-// counterpart is not a clean prefix of the old component (blank line in between)
-// must leave the whole group standalone. Attaching only the new side duplicated
-// the matched comment text: it rendered inside the component diff AND as a
-// standalone comment pair.
+// TestPrefixCounterpartNotCleanPrefixStaysStandalone: an added comment whose old counterpart
+// is not a clean prefix of the old component leaves the whole group standalone. Attaching only
+// the new side duplicated the comment text: component diff plus standalone pair.
 func TestPrefixCounterpartNotCleanPrefixStaysStandalone(t *testing.T) {
 	skipIfNoParser(t)
 
@@ -1226,9 +1220,8 @@ func TestPrefixCounterpartNotCleanPrefixStaysStandalone(t *testing.T) {
 	out := runTool(t, "--no-color", oldPath, newPath)
 	t.Logf("output:\n%s", out)
 
-	// No duplication: each comment line renders exactly once, as standalone entries.
-	// If a run side were attached to the function, its text would appear twice (once
-	// in the component diff, once as a standalone comment pair).
+	// No duplication: each comment line renders exactly once. An attached run side would
+	// appear twice: once in the component diff, once as a standalone pair.
 	for _, want := range []string{"// line1", "/* multi", "// lineX"} {
 		if strings.Count(out, want) != 1 {
 			t.Errorf("comment text %q must render exactly once:\n%s", want, out)
@@ -1245,11 +1238,9 @@ func TestPrefixCounterpartNotCleanPrefixStaysStandalone(t *testing.T) {
 	}
 }
 
-// TestPrefixRewordedLastLineKeepsInsideComponent: a reworded last line of a
-// prefix comment run that falls below the similarity threshold must still attach
-// to the following component. The whole run is attached on both sides so the
-// reword surfaces inside the component diff, not as standalone removed+added
-// comment pairs. No duplicate rendering of the preceding comment lines.
+// TestPrefixRewordedLastLineKeepsInsideComponent: a reworded last line below the similarity
+// threshold still attaches on both sides, so the reword surfaces inside the component diff
+// instead of standalone removed+added pairs; preceding lines never render twice.
 func TestPrefixRewordedLastLineKeepsInsideComponent(t *testing.T) {
 	skipIfNoParser(t)
 
@@ -1287,10 +1278,8 @@ func TestRemovedPrefixCommentSurvivesCollapse(t *testing.T) {
 	newPath := writeFile(t, dir, "new.ts", new)
 
 	out := runTool(t, "--no-color", oldPath, newPath)
-	// With prefix attachment, a removed doc-prefix is rendered as part of
-	// the following component (the method) rather than as a standalone
-	// comment removal. The method's diff shows the prefix removal and the
-	// standalone Comments section no longer contains it.
+	// A removed doc-prefix renders as part of its component's diff rather than as
+	// a standalone removal; the Comments section no longer contains it.
 	if !strings.Contains(out, "foo") || !strings.Contains(out, "-// removed") {
 		t.Errorf("a removed prefix comment must appear inside its component's diff:\n%s", out)
 	}

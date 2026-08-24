@@ -354,9 +354,8 @@ func TestTextReport_EmptySectionsOmitted(t *testing.T) {
 	}
 }
 
-// TestTextReport_BlankDiffLinesOmitted verifies that blank lines inside a
-// diff (empty content) are not rendered as stray "  " / "+" / "-" rows,
-// so components are not surrounded by excessive blank context lines.
+// TestTextReport_BlankDiffLinesOmitted: blank lines inside a diff render no stray
+// "  "/"+"/"-" rows, so components are not surrounded by excessive blank context.
 func TestTextReport_BlankDiffLinesOmitted(t *testing.T) {
 	result := &ir.CorrelationResult{
 
