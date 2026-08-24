@@ -1540,3 +1540,71 @@ func assertReviewDedupMinimized(t *testing.T, output, oldSrc, newSrc string) {
 			rendered, inputLines, 2*inputLines+8, output)
 	}
 }
+
+// TestNestedMethodPortsToInnerFunction: a method whose class is removed matches a same-name
+// nested function inside an added function; both are hoisted and fold into references, while
+// inner arrows/lambdas stay scope-bound and unextracted.
+func TestNestedMethodPortsToInnerFunction(t *testing.T) {
+	skipIfNoParser(t)
+
+	old := `class BPartList extends LitComponent {
+  createRenderRoot() { return this; }
+  render() { const d = {}; return HTML (this, d); }
+  dblclick (event)
+  {
+    this.track.create_part (0);
+  }
+}
+`
+	new := `export function PartList (props)
+{
+  const [parts, set_parts] = createSignal ([]);
+  function dblclick (event)
+  {
+    if (props.track && typeof props.track.create_part === 'function')
+      props.track.create_part (0);
+  }
+  return <div onDblClick={dblclick} />;
+}
+`
+
+	dir := t.TempDir()
+	oldPath := writeFile(t, dir, "old.tsx", old)
+	newPath := writeFile(t, dir, "new.tsx", new)
+
+	out := runTool(t, "--no-color", oldPath, newPath)
+	t.Logf("output:\n%s", out)
+
+	// The containers themselves are too different to match (class removed,
+	// function added).
+	if !strings.Contains(out, "BPartList  [removed]") {
+		t.Errorf("BPartList class must render as removed:\n%s", out)
+	}
+	if !strings.Contains(out, "PartList  [added]") {
+		t.Errorf("PartList function must render as added:\n%s", out)
+	}
+
+	// dblclick is one matched before/after block, converted method→function.
+	if !strings.Contains(out, "dblclick") || !strings.Contains(out, "[converted]") {
+		t.Errorf("dblclick must be a matched converted pair:\n%s", out)
+	}
+	for _, marker := range []string{"dblclick  [added]", "dblclick  [removed]"} {
+		if strings.Contains(out, marker) {
+			t.Errorf("dblclick must not be %s:\n%s", marker, out)
+		}
+	}
+
+	// Folded out of both containers.
+	if n := strings.Count(out, "[matched: function dblclick]"); n < 2 {
+		t.Errorf("expected dblclick folded from both containers (%d refs):\n%s", n, out)
+	}
+
+	// The old method body is not duplicated: its lines appear only in the
+	// matched pair, not inside the removed class blob.
+	classStart := strings.Index(out, "BPartList  [removed]")
+	classEnd := strings.Index(out[classStart:], "Functions")
+	classBlob := out[classStart : classStart+classEnd]
+	if strings.Contains(classBlob, "this.track.create_part (0);") {
+		t.Errorf("old dblclick body must be folded out of the removed class:\n%s", out)
+	}
+}
