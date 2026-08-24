@@ -481,7 +481,11 @@ func (r *TextReporter) writeDiffLine(b *strings.Builder, c color, line *ir.DiffL
 			r.writeWordDiffLine(b, c, line)
 			return
 		}
-		b.WriteString(fmt.Sprintf("%s+%s%s\n", c.green, c.reset, line.Content))
+		if r.Opts.AddedStyle == "green" {
+			b.WriteString(fmt.Sprintf("%s+%s\n", c.green, line.Content))
+		} else {
+			b.WriteString(fmt.Sprintf("%s+%s%s\n", c.green, c.reset, line.Content))
+		}
 	case ir.DiffLineRemoved:
 		// Word-diff paired removed lines are suppressed: the added line's
 		// combined word diff already shows the removed words inline.
@@ -493,7 +497,11 @@ func (r *TextReporter) writeDiffLine(b *strings.Builder, c color, line *ir.DiffL
 			return
 		}
 		r.recordContent(oldSide, line.Content)
-		b.WriteString(fmt.Sprintf("%s-%s%s\n", c.red, c.reset, line.Content))
+		if r.Opts.RemovedStyle == "red" {
+			b.WriteString(fmt.Sprintf("%s-%s\n", c.red, line.Content))
+		} else {
+			b.WriteString(fmt.Sprintf("%s-%s%s\n", c.red, c.reset, line.Content))
+		}
 	default:
 		// Context: under --ignore-all-space, both raw forms are emitted (old text never masquerades as new).
 		newContent := line.Content
