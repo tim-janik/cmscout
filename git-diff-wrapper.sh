@@ -43,6 +43,12 @@ if [ -n "${CMDIFF_REMOVED_STYLE-}" ]; then
   removed_flags="--removed-style=$CMDIFF_REMOVED_STYLE"
 fi
 
+if [ -n "${CMDIFF_WORD_DIFF-}" ]; then
+  word_diff="--word-diff --ignore-all-space"
+else
+  word_diff="--ignore-all-space"
+fi
+
 # /dev/null sides get an empty temp file so cmdiff can read them.
 old_tmp=""
 new_tmp=""
@@ -61,6 +67,6 @@ cleanup() {
 trap cleanup EXIT
 
 # No exec: the EXIT trap must remove the /dev/null temp files after cmdiff finishes.
-"$cmdiff_bin" $skip_flags $added_flags $removed_flags \
+"$cmdiff_bin" $skip_flags $added_flags $removed_flags $word_diff \
     -B "$old_content" -A "$new_content" \
     "a/$old_name" "b/$new_name"
