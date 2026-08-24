@@ -72,9 +72,8 @@ type TextReporter struct {
 	classContainers map[string]*ir.SemanticBlock
 }
 
-// isCompletelyUnchanged: identical source, name, position ⇒ no review signal; whole-file
-// pairs ignore the name; moved pairs always render. Under IgnoreSpace, sources that differ
-// only by whitespace the diff already normalized count as unchanged.
+// isCompletelyUnchanged: identical source, name and position give no review signal; whole-file
+// pairs ignore the name, moved pairs always render, IgnoreSpace counts normalized-equal as same.
 func (r *TextReporter) isCompletelyUnchanged(p *ir.CorrelatedPair, moved bool) bool {
 	if p.Supplemental || p.Old == nil || p.New == nil {
 		return false

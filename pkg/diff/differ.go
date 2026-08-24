@@ -206,15 +206,8 @@ func hasWordDiffChanges(words []ir.DiffWord) bool {
 	return false
 }
 
-// computeWordDiff computes a word-level diff between two lines.
-// When ignoreSpace is true, whitespace-only word differences are suppressed
-// (they are treated as context, so ~<TAB>~ is not emitted for whitespace-only changes).
-//
-// Changed words are consolidated into consecutive spans (git --word-diff
-// style): each maximal run of changed words renders as ONE removed span and
-// ONE added span, with common prefix/suffix words trimmed to context. When
-// more than spanThreshold of the line's words changed, all runs merge into a
-// single span covering the whole changed range.
+// computeWordDiff computes the word-level diff of two lines; ignoreSpace suppresses
+// whitespace-only word differences. Span consolidation policy: [../../doc/word-diff.md](word-diff.md).
 func computeWordDiff(oldLine, newLine string, ignoreSpace bool, spanThreshold float64) []ir.DiffWord {
 	oldWords := splitWords(oldLine)
 	newWords := splitWords(newLine)

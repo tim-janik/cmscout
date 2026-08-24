@@ -36,6 +36,8 @@ spans:
 
 Under --ignore-all-space:
 
+- Whitespace-only word differences are suppressed entirely: a line whose only
+  difference is whitespace renders as plain context, no word-diff markers at all.
 - Common whitespace never breaks a changed region. Otherwise short changed
   tokens like "+" or "/" render as isolated one-character marks, unreadable
   next to the words they belong to.
