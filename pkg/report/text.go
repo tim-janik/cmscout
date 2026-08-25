@@ -14,7 +14,7 @@ import (
 )
 
 // WordDiffStyle configures markers and colors for word-level highlights; fields are editable,
-// e.g. "{+"/"+}" instead of "+"/"~". Defaults and examples: [../../doc/word-diff.md](word-diff.md).
+// e.g. "{+"/"+}" instead of "+"/"~". Defaults and examples: [doc/word-diff.md](../../doc/word-diff.md).
 var WordDiffStyle = struct {
 	AddedPrefix   string
 	AddedSuffix   string

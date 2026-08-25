@@ -8,7 +8,7 @@ import (
 )
 
 // AttachPrefixComments merges doc-prefix comment runs (e.g. `/// Do foo` before `void foo()`) into their
-// component so they render as one diff unit; rules and rationale: [../../doc/prefix-comments.md](prefix-comments.md).
+// component so they render as one diff unit; rules and rationale: [doc/prefix-comments.md](../../doc/prefix-comments.md).
 func AttachPrefixComments(result *ir.CorrelationResult) {
 	if result == nil || len(result.Pairs) == 0 {
 		return

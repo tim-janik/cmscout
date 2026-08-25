@@ -19,7 +19,7 @@ func isFunctionLike(k ir.BlockKind) bool {
 }
 
 // SuppressEnclosedComments drops comment pairs that already render inside their function-like
-// container; matched pairs must share it on both sides. Contract: [../../doc/enclosed-comments.md](enclosed-comments.md).
+// container; matched pairs must share it on both sides. Contract: [doc/enclosed-comments.md](../../doc/enclosed-comments.md).
 func SuppressEnclosedComments(result *ir.CorrelationResult) {
 	if result == nil || len(result.Pairs) == 0 {
 		return

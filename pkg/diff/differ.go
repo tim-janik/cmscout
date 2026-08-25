@@ -10,7 +10,7 @@ import (
 )
 
 // DefaultWordDiffSpanThreshold: collapse a line's word diff to one span when more than this
-// fraction of its words changed. Span policy: [../../doc/word-diff.md](word-diff.md).
+// fraction of its words changed. Span policy: [doc/word-diff.md](../../doc/word-diff.md).
 const DefaultWordDiffSpanThreshold = 0.4
 
 // Options controls diff behaviour.
@@ -207,7 +207,7 @@ func hasWordDiffChanges(words []ir.DiffWord) bool {
 }
 
 // computeWordDiff computes the word-level diff of two lines; ignoreSpace suppresses
-// whitespace-only word differences. Span consolidation policy: [../../doc/word-diff.md](word-diff.md).
+// whitespace-only word differences. Span consolidation policy: [doc/word-diff.md](../../doc/word-diff.md).
 func computeWordDiff(oldLine, newLine string, ignoreSpace bool, spanThreshold float64) []ir.DiffWord {
 	oldWords := splitWords(oldLine)
 	newWords := splitWords(newLine)

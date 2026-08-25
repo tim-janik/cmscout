@@ -125,7 +125,7 @@ func runSemanticReview(cf compareFlags, summary, skipUnchanged bool, addedStyle,
 			correlate.AttachPrefixComments(result)
 
 			// Comments strictly inside a function-like container already render there; a
-			// standalone entry would duplicate. See [../../doc/enclosed-comments.md](enclosed-comments.md).
+			// standalone entry would duplicate. See [doc/enclosed-comments.md](../../doc/enclosed-comments.md).
 			correlate.SuppressEnclosedComments(result)
 
 			// Diff matched pairs last: the report's displayed similarity derives from this final text.
