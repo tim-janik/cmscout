@@ -10,7 +10,7 @@ standalone Comments section; keeping them would show the text twice.
 - Function-like containers are functions, methods, object methods, lambdas,
   arrow functions, lifecycle methods and macro functions. Classes and
   namespaces do not count: a comment inside a class but before a method is a
-  prefix to that method (see doc/prefix-comments.md), not an inner comment of
+  prefix to that method (see [doc/prefix-comments.md](prefix-comments.md)), not an inner comment of
   the class itself.
 - A matched comment pair counts as enclosed only when both sides sit inside
   the same container pair. Different container pairs mean the comment moved
@@ -20,4 +20,4 @@ standalone Comments section; keeping them would show the text twice.
 
 The pass runs in cmd/cmdiff/main.go after CollapseMatchedSubBlocks and
 AttachPrefixComments, before the word diff (stage overview:
-doc/pipeline.md).
+[doc/pipeline.md](pipeline.md)).
