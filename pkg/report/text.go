@@ -725,14 +725,27 @@ func (r *TextReporter) writeSummary(b *strings.Builder, c color, result *ir.Corr
 	}
 
 	b.WriteString(fmt.Sprintf("%sSummary%s\n", c.bold, c.reset))
-	b.WriteString(fmt.Sprintf("  Matched:   %d\n", matched))
-	b.WriteString(fmt.Sprintf("  Unchanged: %s%d%s\n", c.gray, unchanged, c.reset))
-	b.WriteString(fmt.Sprintf("  Changed:   %s%d%s\n", c.yellow, changed, c.reset))
-	b.WriteString(fmt.Sprintf("  Renamed:   %s%d%s\n", c.magenta, renamed, c.reset))
-	b.WriteString(fmt.Sprintf("  Moved:     %s%d%s\n", c.cyan, moved, c.reset))
-	b.WriteString(fmt.Sprintf("  Added:     %s%d%s\n", c.green, added, c.reset))
-	b.WriteString(fmt.Sprintf("  Removed:   %s%d%s\n", c.red, removed, c.reset))
-	// Whitespace counter only when there is at least one such change.
+	if matched > 0 {
+		b.WriteString(fmt.Sprintf("  Matched:   %d\n", matched))
+	}
+	if unchanged > 0 {
+		b.WriteString(fmt.Sprintf("  Unchanged: %s%d%s\n", c.gray, unchanged, c.reset))
+	}
+	if changed > 0 {
+		b.WriteString(fmt.Sprintf("  Changed:   %s%d%s\n", c.yellow, changed, c.reset))
+	}
+	if renamed > 0 {
+		b.WriteString(fmt.Sprintf("  Renamed:   %s%d%s\n", c.magenta, renamed, c.reset))
+	}
+	if moved > 0 {
+		b.WriteString(fmt.Sprintf("  Moved:     %s%d%s\n", c.cyan, moved, c.reset))
+	}
+	if added > 0 {
+		b.WriteString(fmt.Sprintf("  Added:     %s%d%s\n", c.green, added, c.reset))
+	}
+	if removed > 0 {
+		b.WriteString(fmt.Sprintf("  Removed:   %s%d%s\n", c.red, removed, c.reset))
+	}
 	if whitespace > 0 {
 		b.WriteString(fmt.Sprintf("  Whitespace: %s%d%s\n", c.gray, whitespace, c.reset))
 	}
