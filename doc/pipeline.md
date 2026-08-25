@@ -78,14 +78,15 @@ display name term that gives anonymous ordinal pairs full name credit, so
 identical bodies show 100%.
 
 Anonymous blocks carry per-side ordinals (`arrow_function.03`) for display;
-ordinals track position on one side and never act as identity across sides.
+ordinals track position on one side but do not act as identity across sides.
 
 ## Movement tags
 
-A matched pair renders `[moved]` when its position falls outside the longest
-common subsequence of container order, and `[converted]` when its kind changed.
-Comments move only when their enclosing container changed, never by rewording.
-The `[whitespace]` tag marks pairs whose only change is formatting; see
-[doc/whitespace-classification.md](whitespace-classification.md) for how that
-decision is made. Invariant tests pin the tags end to end:
+A pair gets `[moved]` when its position falls outside the longest common
+subsequence of container order, `[converted]` when its kind changed, and
+`[changed]` when its content changed in place, matching the summary's
+Changed counter. Whitespace-only pairs count as cosmetic unless renamed.
+Comments move only when their enclosing container changed, but not by
+rewording. `[whitespace]` marks pairs whose only change is formatting.
+See [doc/whitespace-classification.md](whitespace-classification.md) and
 [doc/test-invariants.md](test-invariants.md).

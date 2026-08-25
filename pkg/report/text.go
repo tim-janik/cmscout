@@ -388,6 +388,7 @@ func (r *TextReporter) writePairHeader(b *strings.Builder, c color, p *ir.Correl
 			label = string(p.New.Kind)
 		}
 		// Anonymous ordinals (arrow_function.02 vs .03) are numbering artifacts, not renames.
+		renamed := p.Old.Kind != ir.KindUnknown && oldName != newName && !sameAnonymousNumberedName(p)
 		if oldName != newName && !sameAnonymousNumberedName(p) {
 			label = fmt.Sprintf("%s → %s", oldName, newName)
 		}
@@ -400,6 +401,11 @@ func (r *TextReporter) writePairHeader(b *strings.Builder, c color, p *ir.Correl
 		}
 		if r.whitespaceOnly(p) {
 			tags = append(tags, "[whitespace]")
+		}
+		// [changed]: content changed in place, matching the summary's Changed counter.
+		// Whitespace-only pairs are cosmetic unless renamed (the rename dominates).
+		if p.InnerDiff != nil && p.InnerDiff.HasChanges() && !(r.whitespaceOnly(p) && !renamed) {
+			tags = append(tags, "[changed]")
 		}
 		sim := similarityFor(p)
 		b.WriteString(fmt.Sprintf("%s  %s%s  %s%.0f%% similarity%s",

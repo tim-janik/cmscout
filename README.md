@@ -13,7 +13,7 @@ cmscout is useful for stable block diffs across code motion: semantic block move
 Line diffs (diff -u) treat every line independently, so when a method moves or is reordered within a file and has its parameters changed or some body alteration, changes become invisible in a slur of added / removed lines.
 cmscout pairs the blocks first, re-identifies the method's before and after versions in a pair, and can render precise line or word diffs for just the method parts that actually changed.
 
-cmscout matches structural blocks in TS/TSX, JS/JSX, Go, Bash, C, and C++ and renders the change per block: similarity percentages, word-level intra-line changes, and `[moved]`/`[converted]`/`[whitespace]` tags where applicable.
+cmscout matches structural blocks in TS/TSX, JS/JSX, Go, Bash, C, and C++ and renders the change per block: similarity percentages, word-level intra-line changes, and `[changed]`/`[moved]`/`[converted]`/`[whitespace]` tags where applicable.
 
 ## How it works
 
@@ -25,7 +25,7 @@ The pipeline has several stages (detailed in [doc/pipeline.md](doc/pipeline.md))
 - Prefix attachment for doc-comment runs directly before a component, so the comments become part of that component's diff, see also [doc/prefix-comments.md](doc/prefix-comments.md) and [doc/enclosed-comments.md](doc/enclosed-comments.md).
 - Word diff for paired blocks, this splits each changed line into words and diffs them at word granularity and consolidates too long adjacent runs into spans, see [doc/word-diff.md](doc/word-diff.md).
 - Reporting renders one section per kind (imports, constants, classes, methods, functions, lifecycle, jsx, comments) and a summary
-- Each block shows a header with similarity percentage and its source code. `[moved]`, `[converted]` and `[whitespace]` tags mark the blocks they apply to, see also [doc/whitespace-classification.md](doc/whitespace-classification.md).
+- Each block shows a header with similarity percentage and its source code. `[changed]`, `[moved]`, `[converted]` and `[whitespace]` tags mark the blocks they apply to, see also [doc/whitespace-classification.md](doc/whitespace-classification.md).
 
 ### Supported languages
 
@@ -45,12 +45,12 @@ Real output, excerpted (Imports, Methods, Lifecycle, Templates, and Other sectio
 ```
 diff --cmscout testdata/old/knob.tsx testdata/new/knob.tsx
 Constants
-@@ -4,1 +4,1 @@  VERSION  98% similarity
+@@ -4,1 +4,1 @@  VERSION  98% similarity  [changed]
 -export const VERSION = '1.0.0';
 +export const VERSION = '1.0.1';
 
 Classes
-@@ -6,37 +6,38 @@  Knob  93% similarity
+@@ -6,37 +6,38 @@  Knob  93% similarity  [changed]
  export class Knob extends LitElement {
    static styles = css`
 -    .knob { width: 100px; height: 100px; }
