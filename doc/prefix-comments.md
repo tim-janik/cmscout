@@ -29,11 +29,14 @@ line would attach and the start of the comment would be lost as diff context.
 
 ## Extraction-time run merging
 
-Single-line `//` comments merge into one run block during extraction
-(`mergeSingleLinePrefixRuns`, right after the AST walk) when they directly
-prefix a component with no blank line between. Without this merge a run is
-double-booked: partly inside the function prefix, partly a lone standalone
-comment.
+Adjacent own-line single-line comments (a run of consecutive `//` lines, or
+one-line `/* ... */` blocks) merge into one comment block during extraction
+(`mergeCommentRuns`, right after the AST walk). A unified diff presents a
+contiguous comment body as one hunk; cmdiff must too, or a multi-line doc
+comment becomes several one-line "comment [added]" entries. Runs are not
+limited to component prefixes, so a standalone file header renders as one
+comment as well. Blank lines, inline comments and multi-line `/* ... */`
+blocks end a run.
 
 `main.go` calls the pass after `CollapseMatchedSubBlocks` and before word-level
 Diff so the InnerDiff includes the prefix text. Stage order:

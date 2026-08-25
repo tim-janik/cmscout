@@ -3,91 +3,87 @@
 package extract
 
 import (
+	"strings"
 	"testing"
 
 	"cmdiff/pkg/ir"
 )
 
-func TestMergeSingleLinePrefixRuns_MergesConsecutive(t *testing.T) {
-	// Three consecutive "//" lines before a function: merged into one block.
-	blocks := []ir.SemanticBlock{
-		{ID: "func", Kind: ir.KindFunction, Name: "f", Span: ir.SourceSpan{StartByte: 35, EndByte: 50, StartLine: 4}},
-		{ID: "c3", Kind: ir.KindComment, Source: "// line three", Span: ir.SourceSpan{StartByte: 20, EndByte: 33, StartLine: 3, EndLine: 3}},
-		{ID: "c2", Kind: ir.KindComment, Source: "// line two", Span: ir.SourceSpan{StartByte: 10, EndByte: 20, StartLine: 2, EndLine: 2}},
-		{ID: "c1", Kind: ir.KindComment, Source: "// line one", Span: ir.SourceSpan{StartByte: 0, EndByte: 11, StartLine: 1, EndLine: 1}},
-	}
-
-	e := &Extractor{}
-	e.mergeSingleLinePrefixRuns(&blocks)
-
-	// Three comments merged into the last one, which survives.
-	if len(blocks) != 2 {
-		t.Fatalf("expected 2 blocks (merged comment + function), got %d", len(blocks))
-	}
-	var merged *ir.SemanticBlock
-	for i := range blocks {
-		if blocks[i].ID == "c3" {
-			merged = &blocks[i]
+// commentBlocks filters extracted blocks to comments in document order.
+func commentBlocks(t *testing.T, src string) []ir.SemanticBlock {
+	t.Helper()
+	var out []ir.SemanticBlock
+	for _, b := range extractFull(t, src) {
+		if b.Kind == ir.KindComment {
+			out = append(out, b)
 		}
 	}
-	if merged == nil {
-		t.Fatal("expected merged comment block c3 to survive")
-	}
-	expected := "// line one\n// line two\n// line three"
-	if merged.Source != expected {
-		t.Errorf("merged source = %q, want %q", merged.Source, expected)
-	}
-	// Span starts at the first comment's position.
-	if merged.Span.StartByte != 0 {
-		t.Errorf("merged StartByte = %d, want 0", merged.Span.StartByte)
-	}
-	if merged.Span.StartLine != 1 {
-		t.Errorf("merged StartLine = %d, want 1", merged.Span.StartLine)
-	}
+	return out
 }
 
-func TestMergeSingleLinePrefixRuns_NoMergeIfBlankLine(t *testing.T) {
-	// Two comment blocks with a blank line between them: not merged.
-	blocks := []ir.SemanticBlock{
-		{ID: "func", Kind: ir.KindFunction, Name: "f", Span: ir.SourceSpan{StartByte: 35, EndByte: 50, StartLine: 5}},
-		{ID: "c2", Kind: ir.KindComment, Source: "// line two", Span: ir.SourceSpan{StartByte: 20, EndByte: 33, StartLine: 4, EndLine: 4}},
-		{ID: "c1", Kind: ir.KindComment, Source: "// line one", Span: ir.SourceSpan{StartByte: 0, EndByte: 11, StartLine: 1, EndLine: 1}},
-		// c1 followed by c2 has a gap: EndLine 1 + 1 = 2, but c2 starts at line 4 → not adjacent.
-	}
-
-	e := &Extractor{}
-	e.mergeSingleLinePrefixRuns(&blocks)
-
-	if len(blocks) != 3 {
-		t.Fatalf("expected 3 blocks (no merge), got %d", len(blocks))
-	}
-}
-
-func TestMergeSingleLinePrefixRuns_NoMergeIfNotPrefix(t *testing.T) {
-	// Comment that is not directly before a non-comment (no successor).
-	blocks := []ir.SemanticBlock{
-		{ID: "c1", Kind: ir.KindComment, Source: "// standalone", Span: ir.SourceSpan{StartByte: 0, EndByte: 14, StartLine: 1, EndLine: 1}},
-	}
-
-	e := &Extractor{}
-	e.mergeSingleLinePrefixRuns(&blocks)
-
+// TestMergeCommentRuns_ConsecutiveRun: a run of own-line "//" lines becomes one block.
+func TestMergeCommentRuns_ConsecutiveRun(t *testing.T) {
+	blocks := commentBlocks(t, "// # cmdiff\n// Code Motion Diff.\n// Amalgamation of review requirements.\n")
 	if len(blocks) != 1 {
-		t.Fatalf("expected 1 block (unchanged), got %d", len(blocks))
+		t.Fatalf("expected 1 merged comment block, got %d: %+v", len(blocks), blocks)
+	}
+	want := "// # cmdiff\n// Code Motion Diff.\n// Amalgamation of review requirements."
+	if blocks[0].Source != want {
+		t.Errorf("source = %q, want %q", blocks[0].Source, want)
+	}
+	if blocks[0].Span.StartLine != 0 || blocks[0].Span.EndLine != 2 {
+		t.Errorf("span lines = %d..%d, want 0..2", blocks[0].Span.StartLine, blocks[0].Span.EndLine)
 	}
 }
 
-func TestMergeSingleLinePrefixRuns_NoMergeMultiLineComment(t *testing.T) {
-	// A multi-line "/* */" comment before a function is not a single-line // comment.
-	blocks := []ir.SemanticBlock{
-		{ID: "func", Kind: ir.KindFunction, Name: "f", Span: ir.SourceSpan{StartByte: 20, EndByte: 35, StartLine: 3}},
-		{ID: "c1", Kind: ir.KindComment, Source: "/* block */", Span: ir.SourceSpan{StartByte: 0, EndByte: 12, StartLine: 1, EndLine: 1}},
+// TestMergeCommentRuns_StandaloneRun: a run that prefixes no component merges too.
+func TestMergeCommentRuns_StandaloneRun(t *testing.T) {
+	blocks := commentBlocks(t, "// first\n// second\n// third\n")
+	if len(blocks) != 1 {
+		t.Fatalf("expected 1 merged comment block, got %d: %+v", len(blocks), blocks)
 	}
+	if blocks[0].Source != "// first\n// second\n// third" {
+		t.Errorf("source = %q", blocks[0].Source)
+	}
+}
 
-	e := &Extractor{}
-	e.mergeSingleLinePrefixRuns(&blocks)
-
+// TestMergeCommentRuns_MultiLineBlock: a multi-line "/* ... */" block stays one block.
+func TestMergeCommentRuns_MultiLineBlock(t *testing.T) {
+	blocks := commentBlocks(t, "/* multi\n   line block */\n// after\n")
 	if len(blocks) != 2 {
-		t.Fatalf("expected 2 blocks (no merge), got %d", len(blocks))
+		t.Fatalf("expected 2 comment blocks, got %d: %+v", len(blocks), blocks)
+	}
+	if blocks[0].Source != "/* multi\n   line block */" {
+		t.Errorf("block 0 source = %q", blocks[0].Source)
+	}
+	if blocks[1].Source != "// after" {
+		t.Errorf("block 1 source = %q", blocks[1].Source)
+	}
+}
+
+// TestMergeCommentRuns_BlankLineSeparates: a blank line ends a run.
+func TestMergeCommentRuns_BlankLineSeparates(t *testing.T) {
+	blocks := commentBlocks(t, "// first\n// second\n\n// next paragraph\n")
+	if len(blocks) != 2 {
+		t.Fatalf("expected 2 comment blocks, got %d: %+v", len(blocks), blocks)
+	}
+	if blocks[0].Source != "// first\n// second" {
+		t.Errorf("block 0 source = %q", blocks[0].Source)
+	}
+	if blocks[1].Source != "// next paragraph" {
+		t.Errorf("block 1 source = %q", blocks[1].Source)
+	}
+}
+
+// TestMergeCommentRuns_InlineCommentNotSwallowed: a trailing comment joins no run.
+func TestMergeCommentRuns_InlineCommentNotSwallowed(t *testing.T) {
+	blocks := commentBlocks(t, "// first\nconst x = 1; // trailing note\n// second\n")
+	if len(blocks) != 3 {
+		t.Fatalf("expected 3 comment blocks, got %d: %+v", len(blocks), blocks)
+	}
+	for i, b := range blocks {
+		if strings.Contains(b.Source, "trailing") && i != 1 {
+			t.Errorf("inline comment must stay its own block, got index %d: %+v", i, blocks)
+		}
 	}
 }

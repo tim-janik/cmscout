@@ -5,7 +5,6 @@ package extract
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
@@ -94,9 +93,8 @@ func (e *Extractor) Extract(ast *parser.AST) (*ir.SemanticDocument, error) {
 	e.indexCxxClasses(root, src, "", "")
 	e.walk(root, src, "", &doc.Blocks)
 
-	// Merge single-line "//" prefix runs right after the AST walk so they are never
-	// double-booked as function prefix and standalone comment (see mergeSingleLinePrefixRuns).
-	e.mergeSingleLinePrefixRuns(&doc.Blocks)
+	// Merge adjacent own-line single-line comments into one block (see mergeCommentRuns).
+	mergeCommentRuns(&doc.Blocks, src)
 
 	// C/C++ components carry their enclosing namespace/class path in reports.
 	if ast.Language().Name == "c" || ast.Language().Name == "cpp" {
@@ -1662,102 +1660,59 @@ func (e *Extractor) jsxName(node *tree_sitter.Node, src []byte) string {
 	return "jsx"
 }
 
-// mergeSingleLinePrefixRuns merges consecutive "//" single-line comments that directly prefix a
-// component into one block, right after the AST walk. Why: [../../doc/prefix-comments.md](prefix-comments.md).
-func (e *Extractor) mergeSingleLinePrefixRuns(blocks *[]ir.SemanticBlock) {
-	if blocks == nil || len(*blocks) == 0 {
+// mergeCommentRuns coalesces adjacent own-line single-line comments into one
+// comment block; the leading block keeps its identity. Why: [doc/prefix-comments.md](../../doc/prefix-comments.md).
+func mergeCommentRuns(blocks *[]ir.SemanticBlock, src []byte) {
+	bs := *blocks
+	if len(bs) < 2 {
 		return
 	}
-	// Sort pointers by source offset for prefix detection.
-	sorted := make([]*ir.SemanticBlock, len(*blocks))
-	for i := range *blocks {
-		sorted[i] = &(*blocks)[i]
+	out := make([]ir.SemanticBlock, 0, len(bs))
+	// Last emitted block: it may still absorb later comments.
+	pending := -1
+	// pendingSingleLine: a multi-line comment in the run stops growth in both directions.
+	pendingSingleLine := false
+	for i := range bs {
+		b := &bs[i]
+		if pending >= 0 && b.Kind == ir.KindComment && out[pending].Kind == ir.KindComment &&
+			pendingSingleLine &&
+			b.Span.StartLine == out[pending].Span.EndLine+1 &&
+			!strings.Contains(b.Source, "\n") &&
+			isOwnLineComment(out[pending], src) && isOwnLineComment(*b, src) {
+			p := &out[pending]
+			p.Source += "\n" + b.Source
+			p.Span.EndByte = b.Span.EndByte
+			p.Span.EndLine = b.Span.EndLine
+			p.Span.EndCol = b.Span.EndCol
+			continue
+		}
+		out = append(out, *b)
+		pending = len(out) - 1
+		pendingSingleLine = !strings.Contains(b.Source, "\n")
 	}
-	sort.Slice(sorted, func(a, b int) bool {
-		if sorted[a].Span.StartByte != sorted[b].Span.StartByte {
-			return sorted[a].Span.StartByte < sorted[b].Span.StartByte
-		}
-		return sorted[a].ID < sorted[b].ID
-	})
-	isSingleLineComment := func(b *ir.SemanticBlock) bool {
-		if b == nil || b.Kind != ir.KindComment {
-			return false
-		}
-		if b.Span.StartLine != b.Span.EndLine {
-			return false
-		}
-		trimmed := strings.TrimLeft(b.Source, " \t")
-		if !strings.HasPrefix(trimmed, "//") {
-			return false
-		}
-		// Ensure single-line source (tree-sitter "//" comments are single line,
-		// but guard against any multi-line "/*" that happens to be single line).
-		if strings.Contains(b.Source, "\n") {
-			return false
-		}
+	*blocks = out
+}
+
+// isOwnLineComment reports whether only whitespace precedes a comment on its
+// line; inline comments ("x = 1; // note") must not start or join a run.
+func isOwnLineComment(b ir.SemanticBlock, src []byte) bool {
+	start := int(b.Span.StartByte)
+	if start <= 0 || start > len(src) {
 		return true
 	}
-	// Identify prefix candidates: comment directly before a non-comment with no blank line.
-	var candidateIdxs []int
-	for i := 0; i+1 < len(sorted); i++ {
-		cur := sorted[i]
-		next := sorted[i+1]
-		if cur.Kind != ir.KindComment || next.Kind == ir.KindComment {
-			continue
-		}
-		if cur.Span.EndLine+1 != next.Span.StartLine {
-			continue
-		}
-		if !isSingleLineComment(cur) {
-			continue
-		}
-		candidateIdxs = append(candidateIdxs, i)
+	lineStart := start - 1
+	for lineStart >= 0 && src[lineStart] != '\n' {
+		lineStart--
 	}
-	toRemove := make(map[*ir.SemanticBlock]bool)
-	for _, idx := range candidateIdxs {
-		target := sorted[idx]
-		if toRemove[target] {
-			continue
-		}
-		curIdx := idx
-		curStartLine := target.Span.StartLine
-		for curIdx > 0 {
-			prevIdx := curIdx - 1
-			prev := sorted[prevIdx]
-			if toRemove[prev] {
-				break
-			}
-			if prev.Kind != ir.KindComment {
-				break
-			}
-			if !isSingleLineComment(prev) {
-				break
-			}
-			if prev.Span.EndLine+1 != curStartLine {
-				break
-			}
-			// Prepend prev into target.
-			target.Source = prev.Source + "\n" + target.Source
-			target.Span.StartByte = prev.Span.StartByte
-			target.Span.StartLine = prev.Span.StartLine
-			target.Span.StartCol = prev.Span.StartCol
-			// ID intentionally not updated (matches correlate.AttachPrefixComments behavior).
-			toRemove[prev] = true
-			curIdx = prevIdx
-			curStartLine = prev.Span.StartLine
+	lineStart++
+	for i := lineStart; i < start; i++ {
+		switch src[i] {
+		case ' ', '\t', '\r':
+		default:
+			return false
 		}
 	}
-	if len(toRemove) == 0 {
-		return
-	}
-	filtered := (*blocks)[:0]
-	for i := range *blocks {
-		if toRemove[&(*blocks)[i]] {
-			continue
-		}
-		filtered = append(filtered, (*blocks)[i])
-	}
-	*blocks = filtered
+	return true
 }
 
 // jsxTagName extracts the tag name from a jsx_opening_element or
