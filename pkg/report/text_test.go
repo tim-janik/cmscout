@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"cmdiff/pkg/diff"
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/diff"
+	"cmscout/pkg/ir"
 )
 
 func TestTextReport_AddedRemoved(t *testing.T) {

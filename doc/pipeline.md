@@ -1,6 +1,6 @@
 # Pipeline
 
-cmdiff matches code blocks between two versions of a file and diffs them per
+cmscout matches code blocks between two versions of a file and diffs them per
 block, so a moved function shows as one changed unit instead of a delete plus
 an add. This page walks through the stages in execution order and names the
 entry point of each.

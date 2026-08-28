@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"cmdiff/pkg/ir"
-	"cmdiff/pkg/lang"
-	"cmdiff/pkg/parser"
+	"cmscout/pkg/ir"
+	"cmscout/pkg/lang"
+	"cmscout/pkg/parser"
 )
 
 func extractSrc(t *testing.T, src string) []testBlock {

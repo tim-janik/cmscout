@@ -9,8 +9,8 @@ import (
 	"sort"
 	"strings"
 
-	"cmdiff/pkg/ir"
-	"cmdiff/pkg/matching"
+	"cmscout/pkg/ir"
+	"cmscout/pkg/matching"
 )
 
 // WordDiffStyle configures markers and colors for word-level highlights; fields are editable,

@@ -1,6 +1,6 @@
 # Test invariants
 
-The invariant suite in `cmd/cmdiff/invariant_test.go` pins down guarantees that
+The invariant suite in `cmd/cmscout/invariant_test.go` pins down guarantees that
 span the whole pipeline: parse (`pkg/parser`), block matching (`pkg/matching`,
 `pkg/correlate`), child collapsing (`CollapseMatchedSubBlocks`), prefix comment
 attachment (`AttachPrefixComments`), word diff and report (`pkg/report`). This

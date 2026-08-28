@@ -5,7 +5,7 @@ package report
 import (
 	"strings"
 
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/ir"
 )
 
 // lexicalTokens: language-neutral tokenization for whitespace-only classification —

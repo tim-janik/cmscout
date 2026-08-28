@@ -3,7 +3,7 @@
 package correlate
 
 import (
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/ir"
 )
 
 // isFunctionLike reports whether a block kind renders enclosed comments itself, so a separate

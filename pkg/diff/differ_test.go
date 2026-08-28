@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/ir"
 )
 
 func TestDiff_NoChanges(t *testing.T) {

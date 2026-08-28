@@ -5,7 +5,7 @@ package correlate
 import (
 	"testing"
 
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/ir"
 )
 
 func mkBlock(id string, kind ir.BlockKind, source string) *ir.SemanticBlock {

@@ -32,7 +32,7 @@ line would attach and the start of the comment would be lost as diff context.
 Adjacent own-line single-line comments (a run of consecutive `//` lines, or
 one-line `/* ... */` blocks) merge into one comment block during extraction
 (`mergeCommentRuns`, right after the AST walk). A unified diff presents a
-contiguous comment body as one hunk; cmdiff must too, or a multi-line doc
+contiguous comment body as one hunk; cmscout must too, or a multi-line doc
 comment becomes several one-line "comment [added]" entries. Runs are not
 limited to component prefixes, so a standalone file header renders as one
 comment as well. Blank lines, inline comments and multi-line `/* ... */`

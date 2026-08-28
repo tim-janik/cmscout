@@ -6,7 +6,7 @@ package diff
 import (
 	"strings"
 
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/ir"
 )
 
 // DefaultWordDiffSpanThreshold: collapse a line's word diff to one span when more than this

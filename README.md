@@ -1,6 +1,6 @@
-# cmdiff
+# cmscout
 
-cmdiff matches code blocks across languages (functions, classes, methods, JSX elements, string templates, imports, constants) and diffs per block.
+cmscout matches code blocks across languages (functions, classes, methods, JSX elements, string templates, imports, constants) and diffs per block.
 A renamed method shows as one changed unit instead of a delete plus an add; a moved function keeps its block identity.
 
 Under the hood, tree-sitter is used for parsing, then a staged hierarchical matcher pairs blocks by name, kind, text similarity, and scope ancestry.
@@ -8,12 +8,12 @@ The tool correlates semantic entities and renders deterministic before/after vie
 
 ## When to use it
 
-cmdiff is useful for stable block diffs across code motion: semantic block movements within a file, or cross-language reidentification of semantic constructs when the before/after files are part of a rewrite.
+cmscout is useful for stable block diffs across code motion: semantic block movements within a file, or cross-language reidentification of semantic constructs when the before/after files are part of a rewrite.
 
 Line diffs (diff -u) treat every line independently, so when a method moves or is reordered within a file and has its parameters changed or some body alteration, changes become invisible in a slur of added / removed lines.
-cmdiff pairs the blocks first, re-identifies the method's before and after versions in a pair, and can render precise line or word diffs for just the method parts that actually changed.
+cmscout pairs the blocks first, re-identifies the method's before and after versions in a pair, and can render precise line or word diffs for just the method parts that actually changed.
 
-cmdiff matches structural blocks in TS/TSX, JS/JSX, Go, Bash, C, and C++ and renders the change per block: similarity percentages, word-level intra-line changes, and `[moved]`/`[converted]`/`[whitespace]` tags where applicable.
+cmscout matches structural blocks in TS/TSX, JS/JSX, Go, Bash, C, and C++ and renders the change per block: similarity percentages, word-level intra-line changes, and `[moved]`/`[converted]`/`[whitespace]` tags where applicable.
 
 ## How it works
 
@@ -43,7 +43,7 @@ Files in unsupported languages or with no semantic blocks fall back to a whole-f
 Real output, excerpted (Imports, Methods, Lifecycle, Templates, and Other sections omitted):
 
 ```
-diff --cmdiff testdata/old/knob.tsx testdata/new/knob.tsx
+diff --cmscout testdata/old/knob.tsx testdata/new/knob.tsx
 Constants
 @@ -4,1 +4,1 @@  VERSION  98% similarity
 -export const VERSION = '1.0.0';
@@ -89,18 +89,18 @@ Requires Go 1.25+ and a C compiler.
 Tree-sitter grammars are C libraries, so builds need `CGO_ENABLED=1`, which the Makefile sets.
 
 ```sh
-git clone https://github.com/tim-janik/cmdiff
-cd cmdiff
-make build		# produces ./cmdiff
+git clone https://github.com/tim-janik/cmscout
+cd cmscout
+make build		# produces ./cmscout
 make test		# full test suite
-make run		# runs cmdiff on testdata/ fixture files
+make run		# runs cmscout on testdata/ fixture files
 make vet
 ```
 
 or from the clone:
 
 ```sh
-CGO_ENABLED=1 go install ./cmd/cmdiff
+CGO_ENABLED=1 go install ./cmd/cmscout
 ```
 
 
@@ -113,7 +113,7 @@ GIT_EXTERNAL_DIFF=/path/to/git-diff-wrapper.sh git diff -- <file>
 git -c diff.external=/path/to/git-diff-wrapper.sh log --ext-diff -p
 ```
 
-The wrapper respects `NO_COLOR`, `CMDIFF_WORD_DIFF`, `CMDIFF_ADDED_STYLE`, `CMDIFF_REMOVED_STYLE`, and `CMDIFF_KEEP_UNCHANGED` environment variables. See the script for details.
+The wrapper respects `NO_COLOR`, `CMCSOUT_WORD_DIFF`, `CMCSOUT_ADDED_STYLE`, `CMCSOUT_REMOVED_STYLE`, and `CMCSOUT_KEEP_UNCHANGED` environment variables. See the script for details.
 
 
 ## License

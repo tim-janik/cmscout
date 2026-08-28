@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/ir"
 )
 
 type contentKey struct {

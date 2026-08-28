@@ -3,7 +3,7 @@
 package matching
 
 import (
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/ir"
 )
 
 // makeTexts returns the distance text for every block (JSX and Lit template

@@ -17,7 +17,7 @@ import (
 	jslang "github.com/tree-sitter/tree-sitter-javascript/bindings/go"
 	tslang "github.com/tree-sitter/tree-sitter-typescript/bindings/go"
 
-	"cmdiff/pkg/lang"
+	"cmscout/pkg/lang"
 )
 
 // Parser wraps a tree-sitter parser for a specific language.

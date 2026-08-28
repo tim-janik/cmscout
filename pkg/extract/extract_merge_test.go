@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/ir"
 )
 
 // commentBlocks filters extracted blocks to comments in document order.
@@ -23,11 +23,11 @@ func commentBlocks(t *testing.T, src string) []ir.SemanticBlock {
 
 // TestMergeCommentRuns_ConsecutiveRun: a run of own-line "//" lines becomes one block.
 func TestMergeCommentRuns_ConsecutiveRun(t *testing.T) {
-	blocks := commentBlocks(t, "// # cmdiff\n// Code Motion Diff.\n// Amalgamation of review requirements.\n")
+	blocks := commentBlocks(t, "// # cmscout\n// Code Motion Scout.\n// Amalgamation of review requirements.\n")
 	if len(blocks) != 1 {
 		t.Fatalf("expected 1 merged comment block, got %d: %+v", len(blocks), blocks)
 	}
-	want := "// # cmdiff\n// Code Motion Diff.\n// Amalgamation of review requirements."
+	want := "// # cmscout\n// Code Motion Scout.\n// Amalgamation of review requirements."
 	if blocks[0].Source != want {
 		t.Errorf("source = %q, want %q", blocks[0].Source, want)
 	}

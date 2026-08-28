@@ -3,7 +3,7 @@
 package matching
 
 import (
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/ir"
 )
 
 // score is one cell of the m×n similarity table.

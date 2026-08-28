@@ -5,7 +5,7 @@ package matching
 import (
 	"testing"
 
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/ir"
 )
 
 // hoistedTestBlock builds a block with a deterministic ID (parent + kind + name).

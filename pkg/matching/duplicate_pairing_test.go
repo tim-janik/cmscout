@@ -5,7 +5,7 @@ package matching
 import (
 	"testing"
 
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/ir"
 )
 
 // TestMatchBlocks_NoDuplicatePairing: every block may be paired at most

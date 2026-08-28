@@ -5,7 +5,7 @@ package correlate
 import (
 	"strings"
 
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/ir"
 )
 
 // absorption: a comment folded into a matched reference (known by block ID or trimmed text).

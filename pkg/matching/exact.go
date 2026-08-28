@@ -5,7 +5,7 @@ package matching
 import (
 	"strings"
 
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/ir"
 )
 
 // scopeKey: Parent ID minus the byte-offset suffix — conservative container identity, only prevents pairings.

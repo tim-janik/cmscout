@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/ir"
 )
 
 // SimilarityThreshold (0.5): below it a pair is unrelated (deletion + addition).
