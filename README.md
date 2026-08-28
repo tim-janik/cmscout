@@ -3,15 +3,15 @@
 cmscout matches code blocks across languages (functions, classes, methods, JSX elements, string templates, imports, constants) and diffs per block.
 A renamed method shows as one changed unit instead of a delete plus an add; a moved function keeps its block identity.
 
-Under the hood, tree-sitter is used for parsing, then a staged hierarchical matcher pairs blocks by name, kind, text similarity, and scope ancestry.
-The tool correlates semantic entities and renders deterministic before/after views.
+Parsing uses tree-sitter. A staged hierarchical matcher then pairs blocks by name, kind, text similarity, and scope ancestry.
+The output is deterministic: the same input always produces the same report.
 
 ## When to use it
 
-cmscout is useful for stable block diffs across code motion: semantic block movements within a file, or cross-language reidentification of semantic constructs when the before/after files are part of a rewrite.
+Use cmscout for stable block diffs across code motion: a block moves within a file, or a rewrite reidentifies the same constructs in another language.
 
-Line diffs (diff -u) treat every line independently, so when a method moves or is reordered within a file and has its parameters changed or some body alteration, changes become invisible in a slur of added / removed lines.
-cmscout pairs the blocks first, re-identifies the method's before and after versions in a pair, and can render precise line or word diffs for just the method parts that actually changed.
+Line diffs (diff -u) treat every line independently. When a method moves, reorders, changes parameters, or alters its body, the change drowns in added and removed lines.
+cmscout pairs the blocks first, re-identifies the method's before and after versions, then renders line or word diffs for just the parts that changed.
 
 cmscout matches structural blocks in TS/TSX, JS/JSX, Go, Bash, C, and C++ and renders the change per block: similarity percentages, word-level intra-line changes, and `[changed]`/`[moved]`/`[converted]`/`[whitespace]` tags where applicable.
 
@@ -22,18 +22,18 @@ The pipeline has several stages (detailed in [doc/pipeline.md](doc/pipeline.md))
 - Extraction of `SemanticBlock`s like functions, methods, classes, interfaces, JSX elements, string templates, imports, etc.
 - Matching of semantic blocks in hierarchical stages by *name and kind*, *comment text*, *distance tables*
 - Collapsing replaces matched children inside matched parents with canonical reference comments (`// [matched: method foo]`), so the parent's diff stays small. See [doc/canonical-references.md](doc/canonical-references.md).
-- Prefix attachment for doc-comment runs directly before a component, so the comments become part of that component's diff, see also [doc/prefix-comments.md](doc/prefix-comments.md) and [doc/enclosed-comments.md](doc/enclosed-comments.md).
-- Word diff for paired blocks, this splits each changed line into words and diffs them at word granularity and consolidates too long adjacent runs into spans, see [doc/word-diff.md](doc/word-diff.md).
-- Reporting renders one section per kind (imports, constants, classes, methods, functions, lifecycle, jsx, comments) and a summary
-- Each block shows a header with similarity percentage and its source code. `[changed]`, `[moved]`, `[converted]` and `[whitespace]` tags mark the blocks they apply to, see also [doc/whitespace-classification.md](doc/whitespace-classification.md).
+- Prefix attachment merges doc-comment runs directly before a component into that component's diff. See [doc/prefix-comments.md](doc/prefix-comments.md) and [doc/enclosed-comments.md](doc/enclosed-comments.md).
+- Word diff splits each changed line into words, diffs them at word granularity, and merges long adjacent runs into spans. See [doc/word-diff.md](doc/word-diff.md).
+- Reporting renders one section per kind (imports, constants, classes, methods, functions, lifecycle, jsx, comments) and a summary.
+- Each block header shows a similarity percentage and the source code, with `[changed]`, `[moved]`, `[converted]`, and `[whitespace]` tags where they apply. See [doc/whitespace-classification.md](doc/whitespace-classification.md).
 
 ### Supported languages
 
-Detection is extension-based and case-insensitive: `.ts`, `.tsx`, `.js`, `.mjs`, `.cjs`, `.jsx`, `.go`, `.sh`, `.bash`, `.c`, and the C++ family `.cc`, `.cpp`, `.cxx`, `.c++`, `.hh`, `.hpp`, `.hxx`, `.h++`, `.tcc`, with legacy `.C` mapping to C++
-and `.h` runs both C and C++ grammars and keeps the parse with fewer errors, so pure-C headers use C while C++ headers stay correct.
-C and C++ additionally split off function-like macros as their own block kind.
+Detection is extension-based and case-insensitive: `.ts`, `.tsx`, `.js`, `.mjs`, `.cjs`, `.jsx`, `.go`, `.sh`, `.bash`, `.c`, and the C++ family `.cc`, `.cpp`, `.cxx`, `.c++`, `.hh`, `.hpp`, `.hxx`, `.h++`, `.tcc`. Legacy `.C` maps to C++.
+For `.h` files, both C and C++ grammars run and the parse with fewer errors wins, so pure-C headers use C while C++ headers stay correct.
+C and C++ split function-like macros into their own block kind.
 
-### Line Coverage
+### Line coverage
 
 Every non-empty line of the before and after input files appears in the report output.
 Files in unsupported languages or with no semantic blocks fall back to a whole-file line diff.
@@ -84,7 +84,7 @@ Summary
 
 ## Install
 
-There are no prebuilt binaries; build from source. 
+There are no prebuilt binaries; build from source.
 Requires Go 1.25+ and a C compiler.
 Tree-sitter grammars are C libraries, so builds need `CGO_ENABLED=1`, which the Makefile sets.
 
