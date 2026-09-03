@@ -29,6 +29,7 @@ func main() {
 
 // No input-size limit: the m×n table and LCS diff are correctness-first by design.
 
+// run parses flags and dispatches to the diff, simple-diff, or stats mode.
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	var (
 		cf              compareFlags
@@ -255,6 +256,7 @@ func writeReport(stdout io.Writer, opts report.Options, result *ir.CorrelationRe
 	return r.Write(stdout, result, "", "")
 }
 
+// parseAndExtract parses and extracts semantic blocks, closing the AST.
 func parseAndExtract(src, path string, separateMacros bool) (*ir.SemanticDocument, error) {
 	doc, ast, err := parseAndExtractWithAST(src, path, separateMacros)
 	if ast != nil {
@@ -305,6 +307,7 @@ func parseAndExtractWithAST(src, path string, separateMacros bool) (*ir.Semantic
 	return parseAndExtractLanguageWithAST(src, path, langCode, separateMacros)
 }
 
+// parseAndExtractLanguageWithAST parses and extracts one language, returning the unclosed AST.
 func parseAndExtractLanguageWithAST(src, path string, langCode lang.Language, separateMacros bool) (*ir.SemanticDocument, *parser.AST, error) {
 	// Create parser
 	p, err := parser.New(langCode)
@@ -361,6 +364,7 @@ func loadPair(oldPath, newPath string, stdin io.Reader) (string, string, error) 
 	return oldSrc, newSrc, nil
 }
 
+// printUsage prints the command help text.
 func printUsage(w io.Writer) {
 	fmt.Fprint(w, `cmscout — code motion scout
 
