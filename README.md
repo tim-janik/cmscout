@@ -115,6 +115,20 @@ git -c diff.external=/path/to/git-diff-wrapper.sh log --ext-diff -p
 
 The wrapper respects `NO_COLOR`, `CMCSOUT_WORD_DIFF`, `CMCSOUT_ADDED_STYLE`, `CMCSOUT_REMOVED_STYLE`, and `CMCSOUT_KEEP_UNCHANGED` environment variables. See the script for details.
 
+### Single-file statistics
+
+`cmscout --stats <file>` parses one file and prints per-semantic-block statistics:
+block size in lines/chars, the doc-comment prefix size (the "prefix command"),
+per-comment sizes with an over-length flag (`--max-comment-lines`, default 5),
+container method counts, and a best-effort branch count as a cyclomatic
+complexity precursor. Every record carries the file name and line span, and
+comment records carry the fully qualified function name — the data points are
+designed for later linting rules and for assessing whether patches increase or
+decrease block complexity. See [doc/stats.md](doc/stats.md).
+
+```sh
+cmscout --stats --max-comment-lines 3 testdata/new/knob.tsx
+```
 
 ## License
 

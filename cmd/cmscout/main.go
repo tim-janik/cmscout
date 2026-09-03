@@ -31,12 +31,14 @@ func main() {
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	var (
-		cf            compareFlags
-		summary       bool
-		skipUnchanged bool
-		simpleDiff    bool
-		addedStyle    string
-		removedStyle  string
+		cf              compareFlags
+		summary         bool
+		skipUnchanged   bool
+		simpleDiff      bool
+		statsMode       bool
+		maxCommentLines int
+		addedStyle      string
+		removedStyle    string
 	)
 
 	fs := flag.NewFlagSet("cmscout", flag.ContinueOnError)
@@ -45,6 +47,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fs.BoolVar(&summary, "summary", false, "show only summary statistics")
 	fs.BoolVar(&skipUnchanged, "skip-unchanged", false, "suppress entirely unchanged components (blocks identical on both sides)")
 	fs.BoolVar(&simpleDiff, "simple-diff", false, "skip semantic analysis: emit a plain whole-file line diff")
+	fs.BoolVar(&statsMode, "stats", false, "single-file mode: report statistics about semantic blocks (sizes, prefix comments, inline comments, methods, branches)")
+	fs.IntVar(&maxCommentLines, "max-comment-lines", 5, "in --stats mode, flag comments longer than this many lines (0 disables)")
 	fs.StringVar(&addedStyle, "added-style", "white", "how to color added blocks: 'white' (only '+' green, body white, readable) or 'green' (entire line green)")
 	fs.StringVar(&removedStyle, "removed-style", "white", "how to color removed blocks: 'white' (only '-' red, body white) or 'red' (entire line red)")
 	fs.Usage = func() { printUsage(stdout) }
@@ -53,6 +57,39 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			return nil
 		}
 		return err
+	}
+
+	if statsMode {
+		// Single-file mode: one positional file name; --old overrides the
+		// display name (needed for stdin), -B redirects the content path.
+		// Mirrors the diff-mode -B/--old semantics.
+		name, content := "", ""
+		if len(fs.Args()) == 1 {
+			name = fs.Args()[0]
+			content = name
+		} else if len(fs.Args()) > 1 {
+			return fmt.Errorf("usage: cmscout --stats [flags] <file>")
+		}
+		if cf.oldName != "" {
+			name = cf.oldName
+		}
+		if cf.beforeFile != "" {
+			content = cf.beforeFile
+		}
+		if name == "" {
+			return fmt.Errorf("usage: cmscout --stats [flags] <file>")
+		}
+		if content == "" {
+			content = "-"
+		}
+		if name == "-" {
+			return fmt.Errorf("--stats: stdin needs a language hint: use --old <name>")
+		}
+		src, err := loadFile(content, stdin)
+		if err != nil {
+			return fmt.Errorf("loading input: %w", err)
+		}
+		return runStats(src, name, maxCommentLines, stdout)
 	}
 
 	oldContentPath, newContentPath, err := cf.resolve(fs.Args())
@@ -219,57 +256,78 @@ func writeReport(stdout io.Writer, opts report.Options, result *ir.CorrelationRe
 }
 
 func parseAndExtract(src, path string, separateMacros bool) (*ir.SemanticDocument, error) {
+	doc, ast, err := parseAndExtractWithAST(src, path, separateMacros)
+	if ast != nil {
+		ast.Close()
+	}
+	return doc, err
+}
+
+// parseAndExtractWithAST parses and extracts semantic blocks, returning the
+// unclosed AST (the caller must Close it) for consumers that need the tree.
+func parseAndExtractWithAST(src, path string, separateMacros bool) (*ir.SemanticDocument, *parser.AST, error) {
 	// Reject undetected languages: parsing an unsupported file would fabricate parse errors.
 	langCode, ok := lang.Detect(path)
 	if !ok {
-		return nil, fmt.Errorf("unsupported language for %s", path)
+		return nil, nil, fmt.Errorf("unsupported language for %s", path)
 	}
 
 	// Choose C or C++ for .h files by parse recovery quality.
 	if langCode.Ext == ".h" {
-		cppDoc, cppErr := parseAndExtractLanguage(src, path, langCode, separateMacros)
-		cDoc, cErr := parseAndExtractLanguage(src, path, lang.Language{Name: "c", Ext: ".c"}, separateMacros)
+		cppDoc, cppAST, cppErr := parseAndExtractLanguageWithAST(src, path, langCode, separateMacros)
+		cDoc, cAST, cErr := parseAndExtractLanguageWithAST(src, path, lang.Language{Name: "c", Ext: ".c"}, separateMacros)
+		closeAST := func(ast *parser.AST) {
+			if ast != nil {
+				ast.Close()
+			}
+		}
 		switch {
 		case cppErr == nil && cErr == nil:
 			if cDoc.ParseErrors < cppDoc.ParseErrors {
-				return cDoc, nil
+				closeAST(cppAST)
+				return cDoc, cAST, nil
 			}
-			return cppDoc, nil // tie and C++ errors both prefer the documented default
+			closeAST(cAST)
+			return cppDoc, cppAST, nil // tie and C++ errors both prefer the documented default
 		case cppErr == nil:
-			return cppDoc, nil
+			closeAST(cAST)
+			return cppDoc, cppAST, nil
 		case cErr == nil:
-			return cDoc, nil
+			closeAST(cppAST)
+			return cDoc, cAST, nil
 		default:
-			return nil, fmt.Errorf("C++ parse: %v; C parse: %v", cppErr, cErr)
+			closeAST(cppAST)
+			closeAST(cAST)
+			return nil, nil, fmt.Errorf("C++ parse: %v; C parse: %v", cppErr, cErr)
 		}
 	}
 
-	return parseAndExtractLanguage(src, path, langCode, separateMacros)
+	return parseAndExtractLanguageWithAST(src, path, langCode, separateMacros)
 }
 
-func parseAndExtractLanguage(src, path string, langCode lang.Language, separateMacros bool) (*ir.SemanticDocument, error) {
+func parseAndExtractLanguageWithAST(src, path string, langCode lang.Language, separateMacros bool) (*ir.SemanticDocument, *parser.AST, error) {
 	// Create parser
 	p, err := parser.New(langCode)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer p.Close()
 
 	// Parse
 	ast, err := p.Parse(context.Background(), []byte(src))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	defer ast.Close()
 
 	// Extract
 	ex := extract.NewWithOptions(path, extract.Options{SeparateMacroFunctions: separateMacros})
 	doc, err := ex.Extract(ast)
 	if err != nil {
-		return nil, err
+		ast.Close()
+		return nil, nil, err
 	}
 
-	return doc, nil
+	return doc, ast, nil
 }
 
 func loadFile(path string, stdin io.Reader) (string, error) {
@@ -309,16 +367,30 @@ func printUsage(w io.Writer) {
 Usage:
   cmscout [flags] <old_file> <new_file>
   cmscout --simple-diff [flags] <old_file> <new_file>
+  cmscout --stats [flags] <file>
 
   The default mode parses both files and reports the change per semantic
   block (functions, classes, methods, constants, imports, JSX elements,
   ...). With --simple-diff the semantic pipeline is skipped entirely and
   the output is a plain whole-file line diff.
 
+  With --stats a single file is parsed and per-block statistics are
+  printed: block size (lines/chars), doc-comment prefix size, inline
+  comment sizes (with --max-comment-lines flagging), container method
+  counts, and branch counts as a cyclomatic complexity precursor. Every
+  record carries the file name and line span, and comments carry the
+  fully qualified function name, so later linting stages can map each
+  data point back to the source. The file may be "-" (stdin) or a
+  display name with -B, mirroring the diff-mode redirection: use
+  --old <name> when the content comes from stdin.
+
   <old_file>/<new_file> are file paths; "-" reads one side from stdin
   (only one side may be stdin).
 
 Flags:
+  --stats                 Single-file mode: report statistics about semantic blocks
+  --max-comment-lines <n> In --stats mode, flag comments longer than n lines
+                            (default: 5; 0 disables the check)
   --simple-diff           Skip semantic analysis: plain whole-file line diff
   --no-color              Disable ANSI colors
   --summary               Show only summary statistics
