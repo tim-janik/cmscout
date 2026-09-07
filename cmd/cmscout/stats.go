@@ -10,10 +10,6 @@ import (
 	"cmscout/pkg/stats"
 )
 
-// runStats implements the single-file statistics mode: parse + extract one
-// source file and render per-block statistics (block sizes, doc-comment prefix
-// sizes, inline comment sizes, container method counts, and branch counts as a
-// cyclomatic complexity precursor).
 func runStats(src, path string, maxCommentLines int, stdout io.Writer) error {
 	// Separate C/C++ macro functions into their own kind for finer statistics.
 	separateMacros := false

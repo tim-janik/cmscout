@@ -48,7 +48,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fs.BoolVar(&summary, "summary", false, "show only summary statistics")
 	fs.BoolVar(&skipUnchanged, "skip-unchanged", false, "suppress entirely unchanged components (blocks identical on both sides)")
 	fs.BoolVar(&simpleDiff, "simple-diff", false, "skip semantic analysis: emit a plain whole-file line diff")
-	fs.BoolVar(&statsMode, "stats", false, "single-file mode: report statistics about semantic blocks (sizes, prefix comments, inline comments, methods, branches)")
+	fs.BoolVar(&statsMode, "stats", false, "single-file mode: report block sizes, comments, method counts, and function complexity")
 	fs.IntVar(&maxCommentLines, "max-comment-lines", 5, "in --stats mode, flag comments longer than this many lines (0 disables)")
 	fs.StringVar(&addedStyle, "added-style", "white", "how to color added blocks: 'white' (only '+' green, body white, readable) or 'green' (entire line green)")
 	fs.StringVar(&removedStyle, "removed-style", "white", "how to color removed blocks: 'white' (only '-' red, body white) or 'red' (entire line red)")
@@ -381,7 +381,7 @@ Usage:
   With --stats a single file is parsed and per-block statistics are
   printed: block size (lines/chars), doc-comment prefix size, inline
   comment sizes (with --max-comment-lines flagging), container method
-  counts, and branch counts as a cyclomatic complexity precursor. Every
+  counts, and per-function cyclomatic complexity. Every
   record carries the file name and line span, and comments carry the
   fully qualified function name, so later linting stages can map each
   data point back to the source. The file may be "-" (stdin) or a

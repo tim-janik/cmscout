@@ -21,7 +21,7 @@ func TestRunStatsMode(t *testing.T) {
 	for _, want := range []string{
 		"# cmscout stats: demo.ts  (ts, 0 parse errors)",
 		"comment prefix_of=foo  at demo.ts:1  lines=1 chars=15",
-		"block function foo  at demo.ts:2-5  lines=4 chars=46  prefix_lines=1 prefix_chars=15  branches=1",
+		"block function foo  at demo.ts:2-5  lines=4 chars=46  prefix_lines=1 prefix_chars=15  branches=1 complexity=2",
 		"comment inside=foo  at demo.ts:3  lines=1 chars=7",
 	} {
 		if !strings.Contains(out, want) {

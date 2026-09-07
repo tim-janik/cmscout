@@ -7,16 +7,6 @@ import (
 	"io"
 )
 
-// Render writes the statistics report as line-oriented records. Every record
-// carries the file name and its 1-based line span, so later linting stages can
-// map each data point back to the source:
-//
-//	# cmscout stats: <file>  (<language>, <N> parse errors)
-//	block <kind> <qualified>  at <file>:<start>-<end>  lines=<n> chars=<n>
-//	  prefix_lines=<n> prefix_chars=<n> [branches=<n>] [methods=<n>]
-//	  comment prefix_of=<qualified>  at <file>:<line>[-<end>]  lines=<n> chars=<n> [exceeds=<lines>]
-//	  comment inside=<qualified>  at <file>:<line>[-<end>]  lines=<n> chars=<n> [exceeds=<lines>]
-//	comment  at <file>:<line>[-<end>]  lines=<n> chars=<n> [exceeds=<lines>]
 func Render(w io.Writer, r *Report) error {
 	if r == nil {
 		return fmt.Errorf("stats: nil report")
@@ -44,7 +34,11 @@ func Render(w io.Writer, r *Report) error {
 			b.Kind, b.Qualified, r.FilePath, b.StartLine, b.EndLine, b.Lines, b.Chars,
 			b.PrefixLines, b.PrefixChars)
 		if isFunctionLike(b.Kind) {
-			line += fmt.Sprintf("  branches=%d", b.Branches)
+			if b.Complexity > 0 {
+				line += fmt.Sprintf("  branches=%d complexity=%d", b.Branches, b.Complexity)
+			} else {
+				line += "  complexity=unknown"
+			}
 		}
 		if showsMethodCount(b.Kind) {
 			line += fmt.Sprintf("  methods=%d", b.Methods)

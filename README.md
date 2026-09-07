@@ -120,11 +120,10 @@ The wrapper respects `NO_COLOR`, `CMCSOUT_WORD_DIFF`, `CMCSOUT_ADDED_STYLE`, `CM
 `cmscout --stats <file>` parses one file and prints per-semantic-block statistics:
 block size in lines/chars, the doc-comment prefix size (the "prefix command"),
 per-comment sizes with an over-length flag (`--max-comment-lines`, default 5),
-container method counts, and a best-effort branch count as a cyclomatic
-complexity precursor. Every record carries the file name and line span, and
-comment records carry the fully qualified function name — the data points are
-designed for later linting rules and for assessing whether patches increase or
-decrease block complexity. See [doc/stats.md](doc/stats.md).
+container method counts, and per-function cyclomatic complexity. Each function
+starts at 1 and adds its own decision points. Nested functions get separate
+scores. Every record carries the file name and line span.
+See [doc/stats.md](doc/stats.md) for counting rules and limits.
 
 ```sh
 cmscout --stats --max-comment-lines 3 testdata/new/knob.tsx

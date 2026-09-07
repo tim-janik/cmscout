@@ -18,7 +18,7 @@ func analyzeSrc(t *testing.T, langName, ext, filePath, src string, opts Options)
 	langCode := lang.Language{Name: langName, Ext: ext}
 	p, err := parser.New(langCode)
 	if err != nil {
-		t.Skipf("parser not available: %v", err)
+		t.Fatalf("parser not available: %v", err)
 	}
 	defer p.Close()
 	ast, err := p.Parse(context.Background(), []byte(src))
@@ -215,9 +215,8 @@ int Widget::value() const {
 	if value == nil {
 		t.Fatalf("missing method definition block: %+v", r.Blocks)
 	}
-	// Branches: if + else-if + 3 case labels (case, case, default) = 5.
-	if value.Branches != 5 {
-		t.Errorf("branches = %d, want 5", value.Branches)
+	if value.Branches != 4 {
+		t.Errorf("branches = %d, want 4", value.Branches)
 	}
 }
 
@@ -250,9 +249,8 @@ func compute(a, b int) int {
 	if fn == nil {
 		t.Fatalf("missing function: %+v", r.Blocks)
 	}
-	// Branches: if + else-if + for + 2 cases + default = 6.
-	if fn.Branches != 6 {
-		t.Errorf("branches = %d, want 6", fn.Branches)
+	if fn.Branches != 5 {
+		t.Errorf("branches = %d, want 5", fn.Branches)
 	}
 }
 
@@ -287,9 +285,8 @@ deploy() {
 	if fn == nil {
 		t.Fatalf("missing function: %+v", r.Blocks)
 	}
-	// Branches: if + elif + for + while + until + 2 case items + && + || = 9.
-	if fn.Branches != 9 {
-		t.Errorf("branches = %d, want 9", fn.Branches)
+	if fn.Branches != 8 {
+		t.Errorf("branches = %d, want 8", fn.Branches)
 	}
 }
 
@@ -351,7 +348,7 @@ function foo() {}
 	}
 	want := "# cmscout stats: demo.ts  (ts, 0 parse errors)\n" +
 		"  comment prefix_of=foo  at demo.ts:2  lines=1 chars=7\n" +
-		"block function foo  at demo.ts:3-3  lines=1 chars=17  prefix_lines=1 prefix_chars=7  branches=0\n"
+		"block function foo  at demo.ts:3-3  lines=1 chars=17  prefix_lines=1 prefix_chars=7  branches=0 complexity=1\n"
 	if sb.String() != want {
 		t.Errorf("render output:\n%s\nwant:\n%s", sb.String(), want)
 	}

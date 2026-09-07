@@ -1,10 +1,5 @@
 // This Source Code Form is licensed MPL-2.0: http://mozilla.org/MPL/2.0
 
-// Package stats computes per-semantic-block statistics for a single source file:
-// block sizes (lines/chars), doc-comment prefix sizes, inline comment sizes,
-// container method counts, and best-effort branch counts as a cyclomatic
-// complexity precursor. The records are meant to feed later linting rules and
-// patch-complexity assessments.
 package stats
 
 import (
@@ -12,8 +7,6 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf8"
-
-	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 
 	"cmscout/pkg/ir"
 	"cmscout/pkg/parser"
@@ -41,15 +34,16 @@ type Comment struct {
 
 // BlockStats holds the statistics for one semantic block.
 type BlockStats struct {
-	Kind      ir.BlockKind
-	Name      string // simple name
-	Qualified string // fully qualified name (e.g. "Knob.updateDelta", "Ase::LoopImpl::run")
-	StartLine int    // first line of the block (1-based)
-	EndLine   int    // last line of the block (1-based)
-	Lines     int    // number of lines the block occupies
-	Chars     int    // number of characters (runes) in the block text
-	Branches  int    // decision points inside function-like blocks (cyclomatic precursor)
-	Methods   int    // direct method-like children (rendered for classes, interfaces, namespaces)
+	Kind       ir.BlockKind
+	Name       string // simple name
+	Qualified  string // fully qualified name (e.g. "Knob.updateDelta", "Ase::LoopImpl::run")
+	StartLine  int    // first line of the block (1-based)
+	EndLine    int    // last line of the block (1-based)
+	Lines      int    // number of lines the block occupies
+	Chars      int    // number of characters (runes) in the block text
+	Branches   int
+	Complexity int
+	Methods    int // direct method-like children (rendered for classes, interfaces, namespaces)
 
 	PrefixLines int // number of lines of the doc-comment prefix run before the block
 	PrefixChars int // number of characters (runes) of the doc-comment prefix run
@@ -112,49 +106,6 @@ func showsMethodCount(k ir.BlockKind) bool {
 	}
 }
 
-// branchKinds are tree-sitter node kinds that each add one decision point to a
-// function's branch count. Covers TS/TSX/JS/JSX, Go, Bash, C, and C++.
-var branchKinds = map[string]bool{
-	"if_statement":           true, // all languages (else-if chains are their own if_statement)
-	"elif_clause":            true, // bash elif
-	"conditional_expression": true, // C/C++ ternary ?:
-	"ternary_expression":     true, // TS/JS ternary ?:
-	"for_statement":          true, // all languages (incl. bash until/select loops)
-	"for_in_statement":       true, // TS/JS for-in and for-of
-	"while_statement":        true, // all languages (incl. bash until)
-	"do_statement":           true, // TS/JS/C/C++
-	"switch_case":            true, // TS/JS case label
-	"switch_default":         true, // TS/JS default label
-	"expression_case":        true, // Go case label
-	"default_case":           true, // Go default label
-	"type_case":              true, // Go type-switch label
-	"communication_case":     true, // Go select label
-	"case_item":              true, // bash case label
-	"catch_clause":           true, // TS/JS/C++ catch
-}
-
-// caseLabelKind reports whether a node kind is a case/default label. C and C++
-// model every label (case and default) as a case_statement node; in bash a
-// case_statement is the whole case construct, whose labels are case_item nodes.
-func caseLabelKind(k, language string) bool {
-	switch k {
-	case "case_statement":
-		return language == "c" || language == "cpp"
-	case "switch_case", "switch_default", "expression_case", "default_case",
-		"type_case", "communication_case", "case_item":
-		return true
-	default:
-		return false
-	}
-}
-
-// shortCircuitKinds are node kinds whose direct && / || children are boolean
-// short-circuit operators (each adds one decision point).
-var shortCircuitKinds = map[string]bool{
-	"binary_expression": true, // TS/JS/Go/C/C++
-	"list":              true, // bash: a && b || c
-}
-
 // Analyze computes statistics for all semantic blocks of a parsed document.
 // The AST is required for branch counting; its source bytes must match the
 // document (as produced by extract.Extract).
@@ -165,6 +116,7 @@ func Analyze(doc *ir.SemanticDocument, ast *parser.AST, opts Options) (*Report, 
 	if ast == nil {
 		return nil, fmt.Errorf("stats: nil AST")
 	}
+	doc, complexities := function_stats(doc, ast)
 	src := ast.Source()
 
 	byID := make(map[string]*ir.SemanticBlock, len(doc.Blocks))
@@ -288,7 +240,8 @@ func Analyze(doc *ir.SemanticDocument, ast *parser.AST, opts Options) (*Report, 
 			bs.Comments = append(bs.Comments, commentStats(c, qualified[b.ID], "", opts.MaxCommentLines))
 		}
 		if isFunctionLike(b.Kind) {
-			bs.Branches = countBranches(ast.RootNode(), b.Span.StartByte, b.Span.EndByte, doc.Language)
+			bs.Complexity = complexities[b.ID]
+			bs.Branches = max(0, bs.Complexity-1)
 		}
 		report.Blocks = append(report.Blocks, bs)
 	}
@@ -391,44 +344,10 @@ func qualifiedName(b *ir.SemanticBlock, byID map[string]*ir.SemanticBlock, sep s
 		if !ok || parent == cur {
 			break
 		}
-		if isContainerKind(parent.Kind) && parent.Name != "" {
+		if (isContainerKind(parent.Kind) || isFunctionLike(parent.Kind)) && parent.Name != "" {
 			parts = append([]string{parent.Name}, parts...)
 		}
 		cur = parent
 	}
 	return strings.Join(append(parts, b.Name), sep)
-}
-
-// countBranches walks the AST nodes intersecting [startByte, endByte) and counts
-// decision points (see branchKinds and shortCircuitKinds). Best-effort and
-// language-approximate; used as a cyclomatic complexity precursor.
-func countBranches(root *tree_sitter.Node, startByte, endByte uint, language string) int {
-	if root == nil {
-		return 0
-	}
-	var walk func(n *tree_sitter.Node) int
-	walk = func(n *tree_sitter.Node) int {
-		if n == nil {
-			return 0
-		}
-		if n.EndByte() <= startByte || n.StartByte() >= endByte {
-			return 0
-		}
-		count := 0
-		if branchKinds[n.Kind()] || caseLabelKind(n.Kind(), language) {
-			count++
-		}
-		if shortCircuitKinds[n.Kind()] {
-			for i := uint(0); i < n.ChildCount(); i++ {
-				if k := n.Child(i); k != nil && (k.Kind() == "&&" || k.Kind() == "||") {
-					count++
-				}
-			}
-		}
-		for i := uint(0); i < n.ChildCount(); i++ {
-			count += walk(n.Child(i))
-		}
-		return count
-	}
-	return walk(root)
 }
