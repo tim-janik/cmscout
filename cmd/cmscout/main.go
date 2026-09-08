@@ -71,7 +71,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	var metrics_only string
 	fs.Visit(func(option *flag.Flag) {
 		switch option.Name {
-		case "format", "root", "name", "stdin-name", "explain", "scan", "include", "exclude":
+		case "format", "root", "name", "stdin-name", "explain", "scan", "include", "exclude", "staged", "worktree", "revision", "base", "parent":
 			metrics_only = option.Name
 		}
 	})
@@ -302,6 +302,8 @@ Usage:
   cmscout --metrics [flags] <file>
   cmscout --metrics [flags] <before_file> <after_file>
   cmscout --metrics --scan [flags] [path ...]
+  cmscout --metrics --staged|--worktree [flags]
+  cmscout --metrics --revision <commit> [--parent <number>|--base <commit>] [flags]
 
   The default mode parses both files and reports the change per semantic
   block (functions, classes, methods, constants, imports, JSX elements,
@@ -319,6 +321,11 @@ Flags:
   --name <file>          Logical name for a single metrics input
   --stdin-name <file>    Logical filename for metrics read from '-'
   --scan                Scan files and directories (default: current directory)
+  --staged              Compare HEAD with the index
+  --worktree            Compare the index with tracked working files
+  --revision <commit>   Compare a commit with its parent
+  --parent <number>     Choose a parent of --revision (required for merges)
+  --base <commit>       Compare --revision against this commit instead
   --include <glob>      Include root-relative scan paths, repeatable; ** spans dirs
   --exclude <glob>      Exclude root-relative scan paths, repeatable
   --simple-diff           Skip semantic analysis: plain whole-file line diff

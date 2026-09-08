@@ -48,8 +48,6 @@ report covers the selected regular source files, not an application's full
 membership. Read errors, binary source, or incomplete file analysis produce a
 partial report and exit 2. An empty selection is a complete report with no files.
 
-Staged and revision inputs are not available yet.
-
 ## Measurements
 
 Every callable has these fields in the JSON `components` array:
@@ -271,6 +269,53 @@ removals from a damaged inventory.
 `--word-diff`, `--word-diff-span-threshold`, and `--ignore-all-space` affect only
 the rendered diff in comparison mode. They do not filter touched names or change
 measurements. JSON remains one document in every case.
+
+## Compare changed files in Git
+
+```sh
+cmscout --metrics --staged
+cmscout --metrics --worktree --format json
+cmscout --metrics --revision HEAD --format json
+cmscout --metrics --revision HEAD --parent 1 --format json
+cmscout --metrics --revision HEAD --base trunk --format json
+cmscout --metrics --staged --include 'src/**' --exclude '**/generated/**'
+```
+
+`--staged` compares HEAD with the index. It reads the staged blobs, including
+partially staged files, and works before the first commit. `--worktree` compares
+the index with tracked working files. Untracked files need `git add` before they
+can appear in either report. Working files are read as raw bytes; clean filters
+and text-conversion commands are not applied.
+
+`--revision` compares a commit with its only parent, or with an absent snapshot
+for a root commit. Merge commits require `--parent`, numbered from 1, or an
+explicit `--base`. `--base` also supports comparisons spanning several commits.
+Missing history is an input error. Revision and staged analysis read source from
+Git objects, so edits in the working directory cannot change their metrics.
+
+Git modes use the repository root for every file's namespace. Run inside the
+repository, or set `--root` to its top directory. They do not infer module
+membership from manifests. Staged and unstaged manifest edits therefore cannot
+change the naming root. File filters follow the scan rules above; a rename is
+selected if either its old or new path passes. Analysis does not update the index
+or working files and does not invoke external diff or text-conversion commands.
+
+JSON has `kind: "change_set"`, `population: "changed_files"`, and an `input`
+record naming the mode and selected sides. `files` contains entries with `change`
+and `comparison`. Each comparison uses the two-file schema above. `change` is
+Git's status letter: `M` modified, `A` added, `D` deleted, `R` renamed, or `T`
+type changed. Whole-file additions and deletions have a null snapshot on the
+absent side and records for every discovered component, including inner functions.
+Git-detected renames mark the retained component names as changed and moved.
+Function moves between other file pairs are still separate additions and deletions.
+
+Every selected file is measured in full, including its unchanged functions.
+Unchanged files are outside this report. It supports changed-function rules,
+not class or application totals. An empty change set is complete. Unsupported
+source extensions appear in `skipped`. Conflicts, unreadable or binary source,
+source symlinks, an unsupported side of a source rename, and incomplete analysis
+produce a partial report and exit 2. These reports retain usable file results
+and list file-level problems in `diagnostics`.
 
 ## Pre-commit feedback
 

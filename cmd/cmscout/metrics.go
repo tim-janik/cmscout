@@ -32,6 +32,11 @@ type metrics_flags struct {
 	scan       bool
 	include    []string
 	exclude    []string
+	staged     bool
+	worktree   bool
+	revision   string
+	base       string
+	parent     int
 }
 
 func (mf *metrics_flags) register(fs *flag.FlagSet) {
@@ -42,6 +47,11 @@ func (mf *metrics_flags) register(fs *flag.FlagSet) {
 	fs.StringVar(&mf.stdin_name, "stdin-name", "", "logical filename and language for metrics read from stdin")
 	fs.BoolVar(&mf.explain, "explain", false, "include the decisions contributing to complexity")
 	fs.BoolVar(&mf.scan, "scan", false, "measure files and directories independently")
+	fs.BoolVar(&mf.staged, "staged", false, "compare HEAD with the index")
+	fs.BoolVar(&mf.worktree, "worktree", false, "compare the index with tracked working files")
+	fs.StringVar(&mf.revision, "revision", "", "compare a commit with its parent or --base")
+	fs.StringVar(&mf.base, "base", "", "base commit for --revision")
+	fs.IntVar(&mf.parent, "parent", 0, "parent number for --revision, starting at 1")
 	fs.Func("include", "include root-relative scan glob, repeatable", func(value string) error {
 		mf.include = append(mf.include, value)
 		return nil
@@ -96,22 +106,48 @@ func exit_code(err error) int {
 
 func (mf metrics_flags) run(fs *flag.FlagSet, cf compareFlags, stdin io.Reader, stdout io.Writer) error {
 	paths := fs.Args()
-	if !mf.scan && len(paths) == 1 && mf.name == "" && mf.stdin_name == "" {
+	git_mode := mf.staged || mf.worktree || mf.revision != ""
+	modes := 0
+	for _, selected := range []bool{mf.scan, mf.staged, mf.worktree, mf.revision != ""} {
+		if selected {
+			modes++
+		}
+	}
+	if modes > 1 {
+		return fmt.Errorf("choose one of --scan, --staged, --worktree, or --revision")
+	}
+	if !mf.scan && !git_mode && len(paths) == 1 && mf.name == "" && mf.stdin_name == "" {
 		if info, err := os.Stat(paths[0]); err == nil && info.IsDir() {
 			mf.scan = true
 		}
 	}
-	pair := !mf.scan && (len(paths) == 2 || cf.oldName != "" || cf.newName != "" || cf.beforeFile != "" || cf.afterFile != "")
+	pair := !mf.scan && !git_mode && (len(paths) == 2 || cf.oldName != "" || cf.newName != "" || cf.beforeFile != "" || cf.afterFile != "")
 	var invalid string
 	fs.Visit(func(option *flag.Flag) {
 		switch option.Name {
 		case "metrics", "format", "root", "name", "stdin-name", "explain", "no-color":
-		case "scan", "include", "exclude":
+		case "scan":
 			if !mf.scan && invalid == "" {
 				invalid = option.Name
 			}
-		case "old", "new", "B", "A", "before-contents", "after-contents", "word-diff", "word-diff-span-threshold", "ignore-all-space":
+		case "include", "exclude":
+			if !mf.scan && !git_mode && invalid == "" {
+				invalid = option.Name
+			}
+		case "staged", "worktree", "revision":
+			if !git_mode && invalid == "" {
+				invalid = option.Name
+			}
+		case "base", "parent":
+			if (mf.revision == "" || option.Name == "parent" && (mf.parent < 1 || mf.base != "")) && invalid == "" {
+				invalid = option.Name
+			}
+		case "old", "new", "B", "A", "before-contents", "after-contents":
 			if !pair && invalid == "" {
+				invalid = option.Name
+			}
+		case "word-diff", "word-diff-span-threshold", "ignore-all-space":
+			if !pair && !git_mode && invalid == "" {
 				invalid = option.Name
 			}
 		default:
@@ -125,6 +161,12 @@ func (mf metrics_flags) run(fs *flag.FlagSet, cf compareFlags, stdin io.Reader, 
 	}
 	if mf.format != "text" && mf.format != "json" {
 		return fmt.Errorf("unknown metrics format %q: expected text or json", mf.format)
+	}
+	if git_mode {
+		if len(paths) != 0 || mf.name != "" || mf.stdin_name != "" {
+			return fmt.Errorf("Git metrics use repository paths; use --root to select a repository and --include/--exclude to select files")
+		}
+		return mf.git_files(cf, stdout)
 	}
 	if mf.scan {
 		if mf.name != "" || mf.stdin_name != "" {

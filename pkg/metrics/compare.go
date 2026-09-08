@@ -15,6 +15,14 @@ type component_pair struct {
 }
 
 func Compare(before, after *Snapshot) (*Comparison, error) {
+	return compare_snapshots(before, after, false)
+}
+
+func CompareFiles(before, after *Snapshot) (*Comparison, error) {
+	return compare_snapshots(before, after, true)
+}
+
+func compare_snapshots(before, after *Snapshot, file_identity bool) (*Comparison, error) {
 	if before == nil && after == nil {
 		return nil, fmt.Errorf("comparison requires at least one snapshot")
 	}
@@ -98,6 +106,12 @@ func Compare(before, after *Snapshot) (*Comparison, error) {
 			change.NameChanged = render_name(old.NameParts[2:]) != render_name(new.NameParts[2:])
 			change.KindChanged = old.Kind != new.Kind
 			change.Moved = old.ParentName != "" && parent_pairs[old.ParentName] != new.ParentName
+			if file_identity && before.Path != after.Path {
+				change.NameChanged, change.Moved = true, true
+				if old.Kind == "file" {
+					change.Renamed = true
+				}
+			}
 			change.CodeChanged = before.component_text(old, true, false) != after.component_text(new, true, false)
 			change.SignatureChanged = old.Body != nil && new.Body != nil &&
 				before.component_text(old, true, true) != after.component_text(new, true, true)
