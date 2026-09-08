@@ -20,6 +20,8 @@ import (
 	"cmscout/pkg/report"
 )
 
+var version = "unversioned"
+
 func main() {
 	if err := run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
@@ -37,11 +39,13 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		simpleDiff    bool
 		addedStyle    string
 		removedStyle  string
+		show_version  bool
 	)
 
 	fs := flag.NewFlagSet("cmscout", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cf.register(fs)
+	fs.BoolVar(&show_version, "version", false, "show version")
 	fs.BoolVar(&summary, "summary", false, "show only summary statistics")
 	fs.BoolVar(&skipUnchanged, "skip-unchanged", false, "suppress entirely unchanged components (blocks identical on both sides)")
 	fs.BoolVar(&simpleDiff, "simple-diff", false, "skip semantic analysis: emit a plain whole-file line diff")
@@ -52,6 +56,11 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		if err == flag.ErrHelp {
 			return nil
 		}
+		return err
+	}
+
+	if show_version {
+		_, err := fmt.Fprintf(stdout, "cmscout %s\n", version)
 		return err
 	}
 
@@ -319,6 +328,7 @@ Usage:
   (only one side may be stdin).
 
 Flags:
+  --version              Show version
   --simple-diff           Skip semantic analysis: plain whole-file line diff
   --no-color              Disable ANSI colors
   --summary               Show only summary statistics
