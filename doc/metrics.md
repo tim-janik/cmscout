@@ -19,9 +19,36 @@ including its language extension. `--stdin-name` does the same for stdin.
 With an explicit `--root`, relative logical-name overrides are relative to that
 root. Ordinary input paths remain relative to the current directory.
 
-Directory scans and staged or commit input are later deliveries. The current
-command rejects those inputs.
 The existing two-file diff command still works without `--metrics`.
+
+## Scan files and directories
+
+```sh
+cmscout --metrics src/
+cmscout --metrics --scan --format json src/ lib/ helper.cc
+cmscout --metrics --scan --include '**/*.go' --exclude 'vendor/**'
+```
+
+A single directory selects a recursive scan. `--scan` treats every path as an
+independent input, including when there are two paths. With no paths it scans
+the current directory. Overlapping inputs are deduplicated by logical path and
+files are sorted. The default naming root is inferred from the common directory
+of the inputs. Use `--root` to keep names consistent with other scans.
+
+Repeat `--include` to select any matching pattern and `--exclude` to reject any
+matching pattern. Patterns match root-relative paths with `/` separators.
+`*` and `?` stay within one path segment; `**` as a complete segment spans zero
+or more directories. Exclusions take precedence. Quote patterns in the shell.
+
+Scans skip `.git`, symlinks, special files, and unsupported source extensions.
+They include hidden, generated, and dependency source files unless filtered.
+JSON has `kind: "scan"`, `population: "selected_files"`, a `files` array of
+ordinary snapshots, and explicit `skipped` and `diagnostics` arrays. A complete
+report covers the selected regular source files, not an application's full
+membership. Read errors, binary source, or incomplete file analysis produce a
+partial report and exit 2. An empty selection is a complete report with no files.
+
+Staged and revision inputs are not available yet.
 
 ## Measurements
 

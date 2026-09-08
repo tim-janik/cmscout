@@ -74,7 +74,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	var metrics_only string
 	fs.Visit(func(option *flag.Flag) {
 		switch option.Name {
-		case "format", "root", "name", "stdin-name", "explain":
+		case "format", "root", "name", "stdin-name", "explain", "scan", "include", "exclude":
 			metrics_only = option.Name
 		}
 	})
@@ -293,6 +293,7 @@ Usage:
   cmscout --simple-diff [flags] <old_file> <new_file>
   cmscout --metrics [flags] <file>
   cmscout --metrics [flags] <before_file> <after_file>
+  cmscout --metrics --scan [flags] [path ...]
 
   The default mode parses both files and reports the change per semantic
   block (functions, classes, methods, constants, imports, JSX elements,
@@ -309,6 +310,9 @@ Flags:
   --root <dir>           Root for qualified names (default: infer from source path)
   --name <file>          Logical name for a single metrics input
   --stdin-name <file>    Logical filename for metrics read from '-'
+  --scan                Scan files and directories (default: current directory)
+  --include <glob>      Include root-relative scan paths, repeatable; ** spans dirs
+  --exclude <glob>      Exclude root-relative scan paths, repeatable
   --version              Show version
   --simple-diff           Skip semantic analysis: plain whole-file line diff
   --no-color              Disable ANSI colors
