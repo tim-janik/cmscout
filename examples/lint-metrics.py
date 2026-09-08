@@ -6,6 +6,10 @@ import sys
 
 
 def component_index(snapshot):
+    if snapshot is None:
+        return {}
+    if snapshot["status"] != "complete":
+        raise ValueError("incomplete source snapshot")
     components = {}
     for component in snapshot["components"]:
         name = component["qualified_name"]
@@ -21,9 +25,15 @@ def known_number(value, label):
     return value
 
 
-def check(report, limits):
+def require_complete(report):
     if report["schema_version"] != "1" or report["status"] != "complete":
         raise ValueError("a complete comparison with schema 1 is required")
+
+
+def check_pair(report, limits):
+    require_complete(report)
+    if report["before"] is None and report["after"] is None:
+        raise ValueError("both source snapshots are absent")
     before = component_index(report["before"])
     after = component_index(report["after"])
     failed = False
@@ -69,6 +79,19 @@ def check(report, limits):
                     print(f'{report["after"]["path"]}:{line}: {new_name}: '
                           f'{role} comment has {chars} characters, limit {limits.max_comment_chars}')
                     failed = True
+    return 1 if failed else 0
+
+
+def check(report, limits):
+    require_complete(report)
+    if report.get("kind") != "change_set":
+        return check_pair(report, limits)
+    if report["population"] != "changed_files" or report["diagnostics"]:
+        raise ValueError("a complete changed-file population is required")
+    failed = False
+    for file in report["files"]:
+        if check_pair(file["comparison"], limits):
+            failed = True
     return 1 if failed else 0
 
 

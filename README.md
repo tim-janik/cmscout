@@ -13,13 +13,15 @@ methods, in every supported language:
 cmscout --metrics somefile.cc
 cmscout --metrics --format json --explain somefile.cc
 cmscout --metrics --format json before.cc after.cc
+cmscout --metrics --scan --format json src/ lib/
+cmscout --metrics --staged --format json
 ```
 
 The report gives each function a qualified name, cyclomatic complexity, source
 lines and characters, and prefix and inline comment sizes. Two inputs add both
 snapshots, touched names, metric deltas, and the semantic diff. See
-[function metrics](doc/metrics.md) for the counting rules, JSON fields, stdin,
-and a small lint rule.
+[function metrics](doc/metrics.md) for directory scans, staged and revision
+comparisons, counting rules, JSON fields, stdin, and a small lint rule.
 
 ## When to use it
 
