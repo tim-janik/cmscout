@@ -71,10 +71,8 @@ func match_path(pattern, name string) bool {
 }
 
 func (filter Filter) Allows(name string) bool {
-	for _, pattern := range filter.Exclude {
-		if match_path(pattern, name) {
-			return false
-		}
+	if filter.excludes(name) {
+		return false
 	}
 	if len(filter.Include) == 0 {
 		return true
@@ -85,6 +83,19 @@ func (filter Filter) Allows(name string) bool {
 		}
 	}
 	return false
+}
+
+func (filter Filter) excludes(name string) bool {
+	for current := name; ; current = path.Dir(current) {
+		for _, pattern := range filter.Exclude {
+			if match_path(pattern, current) {
+				return true
+			}
+		}
+		if path.Dir(current) == current {
+			return false
+		}
+	}
 }
 
 func InferRoot(directory string) string {
@@ -161,6 +172,10 @@ func Scan(paths []string, root string, filter Filter) (*FileSet, error) {
 			if err != nil {
 				return err
 			}
+			if walk_error != nil {
+				result.Diagnostics = append(result.Diagnostics, Notice{name, "read_error", walk_error.Error()})
+				return nil
+			}
 			if seen[name] {
 				if entry != nil && entry.IsDir() {
 					return filepath.SkipDir
@@ -168,11 +183,7 @@ func Scan(paths []string, root string, filter Filter) (*FileSet, error) {
 				return nil
 			}
 			seen[name] = true
-			if walk_error != nil {
-				result.Diagnostics = append(result.Diagnostics, Notice{name, "read_error", walk_error.Error()})
-				return nil
-			}
-			if entry.Name() == ".git" {
+			if strings.Contains("/"+filepath.ToSlash(filename)+"/", "/.git/") {
 				result.Skipped = append(result.Skipped, Notice{name, "metadata", "Git metadata"})
 				if entry.IsDir() {
 					return filepath.SkipDir
@@ -180,6 +191,10 @@ func Scan(paths []string, root string, filter Filter) (*FileSet, error) {
 				return nil
 			}
 			if entry.IsDir() {
+				if filter.excludes(name) {
+					result.Skipped = append(result.Skipped, Notice{name, "filtered", "directory excluded by scan patterns"})
+					return filepath.SkipDir
+				}
 				return nil
 			}
 			if !filter.Allows(name) {

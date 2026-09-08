@@ -89,6 +89,10 @@ func TestMetrics_scan_filters_and_partial_files(t *testing.T) {
 	if len(partial.Skipped) != 2 || partial.Skipped[0].Kind != "metadata" || partial.Skipped[1].Kind != "nonregular" {
 		t.Fatalf("metadata or symlink traversal: %+v", partial.Skipped)
 	}
+	metadata, err := scan_output(t, "--metrics", "--scan", "--format=json", filepath.Join(directory, ".git", "hidden.js"))
+	if err != nil || len(metadata.Files) != 0 || len(metadata.Skipped) != 1 || metadata.Skipped[0].Kind != "metadata" {
+		t.Fatalf("explicit input bypassed Git metadata exclusion: %+v %v", metadata, err)
+	}
 	filtered, err := scan_output(t, "--metrics", "--scan", "--format=json", "--include=**/*.js", "--exclude=broken.js", directory)
 	if err != nil || filtered.Status != "complete" || len(filtered.Files) != 1 || filtered.Files[0].Path != "a.js" {
 		t.Fatalf("filter failed: %+v %v", filtered, err)
