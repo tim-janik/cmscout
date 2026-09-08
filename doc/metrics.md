@@ -331,6 +331,18 @@ python3 examples/lint-metrics.py \
   --max-complexity 10 --max-increase 0 --max-comment-chars 300 < comparison.json
 ```
 
+Use the same script for all staged edits before a commit:
+
+```sh
+cmscout --metrics --staged --format json > comparison.json &&
+python3 examples/lint-metrics.py \
+  --max-complexity 10 --max-increase 0 --max-comment-chars 300 < comparison.json
+```
+
+Use `--worktree` for feedback while editing, or `--revision "$COMMIT"` in CI.
+For merge commits, add the parent number chosen by the review workflow.
+Preserve the report as an artifact when feedback must refer to that exact source.
+
 Choose limits for your project. The script checks only touched callables that
 exist after the edit. Growth limits apply to matched functions; use an absolute
 limit to constrain new functions too. Equality passes. A violation prints the
@@ -339,8 +351,8 @@ qualified function name, source location, observed value, and chosen limit.
 The script exits 0 for a pass, 1 for a rule violation, and 2 for missing or
 incomplete facts. A growth rule also rejects non-comparable deltas. It never
 treats an absent function record as zero. Use `--explain` on the comparison to
-locate the decisions behind a high score. This is a file-pair example; it does
-not yet read staged content or choose commit parents.
+locate the decisions behind a high score. The script accepts both a single
+comparison and a Git change set, and checks every included file pair.
 
 ## A small lint rule
 
