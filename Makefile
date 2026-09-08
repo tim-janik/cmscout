@@ -52,6 +52,20 @@ dist: build ## Build source and binary release archives
 .PHONY: dist
 $(distname)-SHA256SUMS: dist
 
+distcheck: $(distname)-SHA256SUMS ## Check binary and source archive
+	cd artifacts && sha256sum -c $(distname)-SHA256SUMS
+	work=$$(mktemp -d) && trap 'rm -rf $$work' EXIT && \
+	  test "$$(xz -dc artifacts/$(package).tar.xz | git get-tar-commit-id || :)" = "$$(git rev-parse HEAD)" && \
+	  mkdir $$work/pkg && xz -dc artifacts/$(package).tar.xz | tar -x -C $$work/pkg && \
+	  xz -dc artifacts/$(distname).tar.xz > $$work/source.tar && tar -xf $$work/source.tar -C $$work && \
+	  test "$$(git get-tar-commit-id < $$work/source.tar)" = "$$(git rev-parse HEAD)" && \
+	  cd / && test "$$($$work/pkg/$(package)/cmscout --version)" = "cmscout $(version)" && \
+	  $(MAKE) -C $$work/$(distname) build test vet && shellcheck $$work/$(distname)/.github/workflows/*.sh && \
+	  test "$$($$work/$(distname)/cmscout --version)" = "cmscout $(version)" && \
+	  $$work/$(distname)/cmscout --no-color $$work/$(distname)/testdata/old/knob.tsx $$work/$(distname)/testdata/new/knob.tsx | \
+	  grep -qE 'Matched:.*[1-9]'
+.PHONY: distcheck
+
 # == run ==
 run: build ## Build and run on testdata fixtures
 	./cmscout --no-color testdata/old/knob.tsx testdata/new/knob.tsx
