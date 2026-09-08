@@ -15,9 +15,16 @@ type component_pair struct {
 }
 
 func Compare(before, after *Snapshot) (*Comparison, error) {
-	if before == nil || after == nil || before.source == nil || after.source == nil ||
-		len(before.Components) == 0 || len(after.Components) == 0 {
-		return nil, fmt.Errorf("comparison requires snapshots returned by Measure")
+	if before == nil && after == nil {
+		return nil, fmt.Errorf("comparison requires at least one snapshot")
+	}
+	for _, snapshot := range []*Snapshot{before, after} {
+		if snapshot != nil && (snapshot.source == nil || len(snapshot.Components) == 0) {
+			return nil, fmt.Errorf("comparison requires snapshots returned by Measure")
+		}
+	}
+	if before == nil || after == nil {
+		return compare_missing(before, after), nil
 	}
 	if before.SchemaVersion != after.SchemaVersion || before.NamingVersion != after.NamingVersion {
 		return nil, fmt.Errorf("cannot compare different metric schemas or naming versions")

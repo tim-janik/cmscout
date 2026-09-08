@@ -18,6 +18,10 @@ func WriteMetricsJSON(w io.Writer, snapshot *metrics.Snapshot) error {
 }
 
 func WriteMetricsText(w io.Writer, snapshot *metrics.Snapshot) error {
+	if snapshot == nil {
+		_, err := fmt.Fprintln(w, "absent")
+		return err
+	}
 	output := bufio.NewWriter(w)
 	fmt.Fprintf(output, "metrics %s (%s; functions; %s)\n", snapshot.Path, snapshot.Language, snapshot.Status)
 	fmt.Fprintf(output, "profiles: %s\n", strings.Join(snapshot.Profiles, ", "))
