@@ -12,6 +12,7 @@
 *~
 .env
 /cmscout
+/artifacts/
 /tmp/
 BACKLOG.md
 coverage.*
