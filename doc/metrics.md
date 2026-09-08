@@ -38,7 +38,8 @@ of the inputs. Use `--root` to keep names consistent with other scans.
 Repeat `--include` to select any matching pattern and `--exclude` to reject any
 matching pattern. Patterns match root-relative paths with `/` separators.
 `*` and `?` stay within one path segment; `**` as a complete segment spans zero
-or more directories. Exclusions take precedence. Quote patterns in the shell.
+or more directories. Exclusions take precedence; matching directories are not
+visited. Quote patterns in the shell.
 
 Scans skip `.git`, symlinks, special files, and unsupported source extensions.
 They include hidden, generated, and dependency source files unless filtered.
