@@ -6,6 +6,21 @@ A renamed method shows as one changed unit instead of a delete plus an add; a mo
 Parsing uses tree-sitter. A staged hierarchical matcher then pairs blocks by name, kind, text similarity, and scope ancestry.
 The output is deterministic: the same input always produces the same report.
 
+Use `--metrics` to measure a single source file, including nested functions and
+methods, in every supported language:
+
+```sh
+cmscout --metrics somefile.cc
+cmscout --metrics --format json --explain somefile.cc
+cmscout --metrics --format json before.cc after.cc
+```
+
+The report gives each function a qualified name, cyclomatic complexity, source
+lines and characters, and prefix and inline comment sizes. Two inputs add both
+snapshots, touched names, metric deltas, and the semantic diff. See
+[function metrics](doc/metrics.md) for the counting rules, JSON fields, stdin,
+and a small lint rule.
+
 ## When to use it
 
 Use cmscout for stable block diffs across code motion: a block moves within a file, or a rewrite reidentifies the same constructs in another language.
