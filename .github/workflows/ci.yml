@@ -24,6 +24,8 @@ jobs:
     - run: make all
     - run: make test
     - run: make vet
+    - run: .github/workflows/release-test.sh
+      if: github.ref_type != 'tag'        # skip release tooling tests, Release runs the real thing
 
   Release:
     if: github.ref_type == 'tag'        # constrained by on.push.tags
