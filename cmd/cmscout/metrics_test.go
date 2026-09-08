@@ -85,7 +85,7 @@ func TestMetrics_errors_and_partial_output(t *testing.T) {
 	path := writeFile(t, directory, "a.js", "function f() {}")
 	for _, arguments := range [][]string{
 		{"--metrics"}, {"--metrics", path, path, path},
-		{"--metrics", directory}, {"--metrics", "--format=yaml", path},
+		{"--metrics", "--format=yaml", path},
 		{"--metrics", "--unknown", path}, {"--metrics", "-"},
 		{"--unknown", "--metrics", path},
 		{"--metrics", "--stdin-name=a.js", path}, {"--metrics", "--summary", path},

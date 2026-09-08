@@ -19,6 +19,7 @@ import (
 	"cmscout/pkg/lang"
 	"cmscout/pkg/metrics"
 	"cmscout/pkg/report"
+	"cmscout/pkg/source"
 )
 
 type metrics_flags struct {
@@ -28,6 +29,9 @@ type metrics_flags struct {
 	name       string
 	stdin_name string
 	explain    bool
+	scan       bool
+	include    []string
+	exclude    []string
 }
 
 func (mf *metrics_flags) register(fs *flag.FlagSet) {
@@ -37,6 +41,15 @@ func (mf *metrics_flags) register(fs *flag.FlagSet) {
 	fs.StringVar(&mf.name, "name", "", "logical name for a single metrics input")
 	fs.StringVar(&mf.stdin_name, "stdin-name", "", "logical filename and language for metrics read from stdin")
 	fs.BoolVar(&mf.explain, "explain", false, "include the decisions contributing to complexity")
+	fs.BoolVar(&mf.scan, "scan", false, "measure files and directories independently")
+	fs.Func("include", "include root-relative scan glob, repeatable", func(value string) error {
+		mf.include = append(mf.include, value)
+		return nil
+	})
+	fs.Func("exclude", "exclude root-relative scan glob, repeatable", func(value string) error {
+		mf.exclude = append(mf.exclude, value)
+		return nil
+	})
 }
 
 func metrics_requested(fs *flag.FlagSet, args []string) bool {
@@ -83,11 +96,20 @@ func exit_code(err error) int {
 
 func (mf metrics_flags) run(fs *flag.FlagSet, cf compareFlags, stdin io.Reader, stdout io.Writer) error {
 	paths := fs.Args()
-	pair := len(paths) == 2 || cf.oldName != "" || cf.newName != "" || cf.beforeFile != "" || cf.afterFile != ""
+	if !mf.scan && len(paths) == 1 && mf.name == "" && mf.stdin_name == "" {
+		if info, err := os.Stat(paths[0]); err == nil && info.IsDir() {
+			mf.scan = true
+		}
+	}
+	pair := !mf.scan && (len(paths) == 2 || cf.oldName != "" || cf.newName != "" || cf.beforeFile != "" || cf.afterFile != "")
 	var invalid string
 	fs.Visit(func(option *flag.Flag) {
 		switch option.Name {
 		case "metrics", "format", "root", "name", "stdin-name", "explain", "no-color":
+		case "scan", "include", "exclude":
+			if !mf.scan && invalid == "" {
+				invalid = option.Name
+			}
 		case "old", "new", "B", "A", "before-contents", "after-contents", "word-diff", "word-diff-span-threshold", "ignore-all-space":
 			if !pair && invalid == "" {
 				invalid = option.Name
@@ -103,6 +125,12 @@ func (mf metrics_flags) run(fs *flag.FlagSet, cf compareFlags, stdin io.Reader, 
 	}
 	if mf.format != "text" && mf.format != "json" {
 		return fmt.Errorf("unknown metrics format %q: expected text or json", mf.format)
+	}
+	if mf.scan {
+		if mf.name != "" || mf.stdin_name != "" {
+			return fmt.Errorf("scan inputs use their filesystem names; --name and --stdin-name are not supported")
+		}
+		return mf.scan_files(paths, stdout)
 	}
 	if pair {
 		return mf.compare(cf, paths, stdin, stdout)
@@ -258,7 +286,7 @@ func metric_context(name, root string, virtual bool) (metrics.Options, error) {
 		return metrics.Options{}, err
 	}
 	if root == "" {
-		root = infer_metric_root(filepath.Dir(absolute))
+		root = source.InferRoot(filepath.Dir(absolute))
 	}
 	logical, err := filepath.Rel(root, absolute)
 	if err != nil {
@@ -270,17 +298,4 @@ func metric_context(name, root string, virtual bool) (metrics.Options, error) {
 	digest := sha256.Sum256([]byte(filepath.Clean(root)))
 	namespace := fmt.Sprintf("%s@%x", filepath.Base(root), digest[:8])
 	return metrics.Options{Namespace: namespace, Path: filepath.ToSlash(logical)}, nil
-}
-
-func infer_metric_root(directory string) string {
-	for current := directory; ; current = filepath.Dir(current) {
-		for _, marker := range []string{"go.mod", "go.work", "compile_commands.json", ".git"} {
-			if _, err := os.Stat(filepath.Join(current, marker)); err == nil {
-				return current
-			}
-		}
-		if filepath.Dir(current) == current {
-			return directory
-		}
-	}
 }
