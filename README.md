@@ -17,6 +17,18 @@ cmscout --simple-diff a.txt b.txt    # plain whole-file line diff, any file type
 One side can be `-` to read from stdin.
 `cmscout --help` lists the remaining options.
 
+Use `--metrics` to measure a single source file, including nested functions and methods, in every supported language:
+
+```sh
+cmscout --metrics somefile.cc
+cmscout --metrics --format json --explain somefile.cc
+cmscout --metrics --format json before.cc after.cc
+```
+
+The report gives each function a qualified name, cyclomatic complexity, source lines and characters, and prefix and inline comment sizes.
+Two inputs add both snapshots, touched names, metric deltas, and the semantic diff.
+See [function metrics](doc/metrics.md) for the counting rules, JSON fields, stdin, and a small lint rule.
+
 ## When to use it
 
 Use cmscout for stable block diffs across code motion: a block moves within a file, or a rewrite reidentifies the same constructs in another language.
