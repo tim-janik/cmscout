@@ -45,6 +45,7 @@ TITLE="$PROJECT $VERSION"
 # PRERELEASE for lightweight tags, DRAFT for annotated.
 KIND=--prerelease
 [[ $(git cat-file -t "refs/tags/$TAG") != tag ]] || KIND=--draft
+[[ $KIND != --draft || $(awk '/^##? v?[0-9]/{sub(/^v/,"",$2);print $2;exit}' NEWS.md) == "$VERSION" ]] || die 'NEWS mismatch'
 
 # Build release assets, in docker if requested.
 if [[ $DOCKER ]]; then

@@ -90,9 +90,11 @@ grep -qx 'example 0.1.0-rc.5' "$GH_TEST_LOG"
 grep -qx 'Candidate notes.' "$GH_TEST_NOTES"
 expect_failure grep -q 'Old notes.' "$GH_TEST_NOTES"
 printf '## 0.1.0-rc.50\n' > NEWS.md
-expect_failure .github/workflows/gh-release.sh v0.1.0-rc.5
+expect_failure env FAKE_MAKE_STATUS=3 .github/workflows/gh-release.sh v0.1.0-rc.5
+grep -q 'NEWS mismatch' "$work/failure"
 rm NEWS.md
-expect_failure .github/workflows/gh-release.sh v0.1.0-rc.5
+expect_failure env FAKE_MAKE_STATUS=3 .github/workflows/gh-release.sh v0.1.0-rc.5
+grep -q 'NEWS mismatch' "$work/failure"
 
 # Lightweight tag on the trunk tip: prerelease with git-log notes.
 git checkout -q -- NEWS.md
