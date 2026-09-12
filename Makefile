@@ -45,7 +45,13 @@ dist: build ## Build source and binary release archives
 	git diff --quiet HEAD -- || echo 'WARNING: working tree is dirty' >&2
 	rm -rf artifacts && mkdir artifacts
 	git archive --prefix=$(distname)/ HEAD | xz -T1 -9 > artifacts/$(distname).tar.xz
-	git archive --prefix=$(package)/ --add-file=cmscout HEAD git-diff-wrapper.sh LICENSE README.md doc | \
+	{ cat LICENSE "$$(go env GOROOT)/LICENSE"; \
+	  go list -deps -f '{{if .Module}}{{if not .Module.Main}}{{.Module.Dir}}{{end}}{{end}}' ./cmd/cmscout | \
+	    sort -u | while IFS= read -r dir; do \
+	      test -z "$$dir" || find "$$dir" -type f -name LICENSE -exec cat {} +; \
+	    done; } > artifacts/LICENSE
+	git archive --prefix=$(package)/ --add-file=cmscout --add-file=artifacts/LICENSE \
+	  HEAD git-diff-wrapper.sh README.md doc | \
 	  xz -T1 -9 > artifacts/$(package).tar.xz
 	cd artifacts && sha256sum $(distname).tar.xz $(package).tar.xz > $(distname)-SHA256SUMS
 	ls -lh artifacts/*
