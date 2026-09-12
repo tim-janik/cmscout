@@ -34,7 +34,7 @@ vet: ## Run go vet
 # == build ==
 # CGO is required because tree-sitter grammars are C libraries.
 build: ## Build the cmscout binary
-	CGO_ENABLED=1 go build -trimpath $(if $(version),-ldflags '-X main.version=$(version)') -o cmscout ./cmd/cmscout
+	CGO_ENABLED=1 go build -buildvcs=false -trimpath $(if $(version),-ldflags '-X main.version=$(version)') -o cmscout ./cmd/cmscout
 .PHONY: build
 
 version: ## Print the release version
@@ -61,6 +61,7 @@ distcheck: $(distname)-SHA256SUMS ## Check binary and source archive
 	  test "$$(git get-tar-commit-id < $$work/source.tar)" = "$$(git rev-parse HEAD)" && \
 	  cd / && test "$$($$work/pkg/$(package)/cmscout --version)" = "cmscout $(version)" && \
 	  $(MAKE) -C $$work/$(distname) build test vet && shellcheck $$work/$(distname)/.github/workflows/*.sh && \
+	  cmp $$work/pkg/$(package)/cmscout $$work/$(distname)/cmscout && \
 	  test "$$($$work/$(distname)/cmscout --version)" = "cmscout $(version)" && \
 	  $$work/$(distname)/cmscout --no-color $$work/$(distname)/testdata/old/knob.tsx $$work/$(distname)/testdata/new/knob.tsx | \
 	  grep -qE 'Matched:.*[1-9]'
