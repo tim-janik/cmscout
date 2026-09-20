@@ -75,6 +75,37 @@ func TestCompare_nested_changes_and_deltas(t *testing.T) {
 	}
 }
 
+func TestCompare_ranges_exclude_adjacent_lines(t *testing.T) {
+	result := compare_sources(t, "a.js",
+		"const flag = 1;\nfunction outer() {\n  return 1;\n}\n",
+		"const flag = 2;\nfunction outer() {\n  return 2;\n}\n")
+	change := change_named(t, result, "outer")
+	for _, ranges := range [][]Span{change.BeforeRanges, change.AfterRanges} {
+		if len(ranges) != 1 || ranges[0].StartLine != 2 || ranges[0].EndLine != 3 {
+			t.Fatalf("function ranges include an adjacent line: %+v", ranges)
+		}
+	}
+}
+
+func TestIntersects_half_open_spans(t *testing.T) {
+	span := &Span{StartByte: 10, EndByte: 20}
+	for _, test := range []struct {
+		other *Span
+		want  bool
+	}{
+		{nil, false},
+		{&Span{StartByte: 0, EndByte: 10}, false},
+		{&Span{StartByte: 20, EndByte: 30}, false},
+		{&Span{StartByte: 9, EndByte: 11}, true},
+		{&Span{StartByte: 19, EndByte: 21}, true},
+		{&Span{StartByte: 10, EndByte: 20}, true},
+	} {
+		if intersects(span, test.other) != test.want || intersects(test.other, span) != test.want {
+			t.Fatalf("wrong overlap for %+v and %+v", span, test.other)
+		}
+	}
+}
+
 func TestCompare_comments_and_formatting(t *testing.T) {
 	for _, test := range []struct {
 		before, after                    string

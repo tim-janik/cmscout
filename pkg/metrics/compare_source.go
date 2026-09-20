@@ -219,5 +219,5 @@ func ranges_for(component *Component, ranges []Span) []Span {
 }
 
 func intersects(a, b *Span) bool {
-	return a != nil && b != nil && a.StartByte <= b.EndByte && b.StartByte <= a.EndByte
+	return a != nil && b != nil && a.StartByte < b.EndByte && b.StartByte < a.EndByte
 }
