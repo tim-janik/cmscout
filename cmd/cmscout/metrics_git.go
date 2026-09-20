@@ -12,13 +12,7 @@ import (
 	"cmscout/pkg/source"
 )
 
-func (mf metrics_flags) git_files(cf compareFlags, stdout io.Writer) error {
-	mode := "revision"
-	if mf.staged {
-		mode = "staged"
-	} else if mf.worktree {
-		mode = "worktree"
-	}
+func (mf metrics_flags) git_files(mode string, cf compareFlags, stdout io.Writer) error {
 	files, err := source.Git(source.GitOptions{Directory: mf.root, Mode: mode, Revision: mf.revision,
 		Base: mf.base, Parent: mf.parent, Filter: source.Filter{Include: mf.include, Exclude: mf.exclude}})
 	if err != nil {

@@ -118,7 +118,7 @@ func (mf metrics_flags) run(fs *flag.FlagSet, cf compareFlags, stdin io.Reader, 
 		if len(paths) != 0 {
 			return fmt.Errorf("Git metrics use repository paths; use --root to select a repository and --include/--exclude to select files")
 		}
-		return mf.git_files(cf, stdout)
+		return mf.git_files(mode, cf, stdout)
 	case "scan":
 		return mf.scan_files(paths, stdout)
 	case "pair":
@@ -180,9 +180,6 @@ func (mf metrics_flags) single_file(paths []string, stdin io.Reader, stdout io.W
 }
 
 func (mf metrics_flags) compare(cf compareFlags, paths []string, stdin io.Reader, stdout io.Writer) error {
-	if mf.name != "" || mf.stdin_name != "" {
-		return fmt.Errorf("two-file metrics use --old/--new for logical names and -B/-A for content paths")
-	}
 	old_virtual, new_virtual := cf.oldName != "", cf.newName != ""
 	old_path, new_path, err := cf.resolve(paths)
 	if err != nil {
