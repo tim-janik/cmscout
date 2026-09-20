@@ -40,3 +40,46 @@ func TestParse_invalid_inputs(t *testing.T) {
 		}
 	}
 }
+
+type cancel_before_fallback struct {
+	context.Context
+	cancel context.CancelFunc
+	checks int
+}
+
+func (ctx *cancel_before_fallback) Err() error {
+	ctx.checks++
+	if ctx.checks == 2 {
+		ctx.cancel()
+	}
+	return ctx.Context.Err()
+}
+
+func TestParse_cancellation_before_header_fallback(t *testing.T) {
+	base, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ctx := &cancel_before_fallback{Context: base, cancel: cancel}
+	ast, err := Parse(ctx, []byte("typeof(int) value;\n"), "api.h")
+	if ast != nil {
+		defer ast.Close()
+	}
+	if ctx.checks != 2 || ast != nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("header selection ignored cancellation: checks=%d ast=%v error=%v", ctx.checks, ast, err)
+	}
+}
+
+func TestParse_nil_context(t *testing.T) {
+	for _, test := range []struct{ path, source, language string }{
+		{"a.go", "package p\n", "go"},
+		{"api.h", "typeof(int) value;\n", "c"},
+	} {
+		ast, err := Parse(nil, []byte(test.source), test.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ast.Close()
+		if ast.Language().Name != test.language || ast.RootNode() == nil {
+			t.Fatalf("nil context changed parsing for %s", test.path)
+		}
+	}
+}

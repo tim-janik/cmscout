@@ -2,6 +2,7 @@ package analysis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"cmscout/pkg/lang"
@@ -18,6 +19,10 @@ func Parse(ctx context.Context, source []byte, path string) (*parser.AST, error)
 		return primary, primary_error
 	}
 	c_tree, c_error := parse_language(ctx, source, lang.Language{Name: "c", Ext: ".h"})
+	if errors.Is(c_error, context.Canceled) || errors.Is(c_error, context.DeadlineExceeded) {
+		primary.Close()
+		return nil, c_error
+	}
 	switch {
 	case primary_error == nil && c_error == nil:
 		if c_tree.ErrorCount() < primary.ErrorCount() {
