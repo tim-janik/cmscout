@@ -142,3 +142,29 @@ func TestTemplateExtraction_InterpolationWithGt(t *testing.T) {
 		t.Errorf("template block name = %q, want div", blocks[0].Name)
 	}
 }
+
+func TestTemplateExtraction_VoidElements(t *testing.T) {
+	// A void tag without '/' must not stay on the nesting stack and swallow the
+	// enclosing element.
+	blocks := templateBlocks(t, "html`<div><input type=\"text\"><span>x</span></div>`;")
+	if len(blocks) != 1 || blocks[0].Name != "div" {
+		t.Fatalf("expected one div block, got %v", blocks)
+	}
+	if want := "<div><input type=\"text\"><span>x</span></div>"; blocks[0].Source != want {
+		t.Errorf("template block source = %q, want %q", blocks[0].Source, want)
+	}
+	// <input /> and <input> must scan identically.
+	selfClosing := templateBlocks(t, "html`<div><input /><span>x</span></div>`;")
+	if len(selfClosing) != 1 || selfClosing[0].Name != "div" {
+		t.Errorf("self-closing input: expected one div block, got %v", selfClosing)
+	}
+	// Top-level void tags without '/' are elements of their own.
+	top := templateBlocks(t, "html`<img><br>`;")
+	var names []string
+	for _, b := range top {
+		names = append(names, b.Name)
+	}
+	if got := strings.Join(names, ","); got != "img,br" {
+		t.Errorf("template blocks = %q, want img,br", got)
+	}
+}
