@@ -182,3 +182,17 @@ func TestTemplateExtraction_VoidElementsIgnoreCase(t *testing.T) {
 		t.Errorf("expected one IMG block, got %v", blocks)
 	}
 }
+
+func TestTemplateExtraction_UnfinishedVoidTags(t *testing.T) {
+	for _, body := range []string{"<img", "<div><img", "<img src=\"unfinished>"} {
+		src := "html`" + body + "`;"
+		if blocks := templateBlocks(t, src); len(blocks) != 0 {
+			t.Errorf("source %q: expected no template blocks, got %v", src, blocks)
+		}
+	}
+
+	blocks := templateBlocks(t, "html`<img>`;")
+	if len(blocks) != 1 || blocks[0].Name != "img" {
+		t.Errorf("expected one img block at end of template, got %v", blocks)
+	}
+}
