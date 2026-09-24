@@ -113,7 +113,7 @@ GIT_EXTERNAL_DIFF=/path/to/git-diff-wrapper.sh git diff -- <file>
 git -c diff.external=/path/to/git-diff-wrapper.sh log --ext-diff -p
 ```
 
-The wrapper respects `NO_COLOR`, `CMCSOUT_WORD_DIFF`, `CMCSOUT_ADDED_STYLE`, `CMCSOUT_REMOVED_STYLE`, and `CMCSOUT_KEEP_UNCHANGED` environment variables. See the script for details.
+The wrapper respects `NO_COLOR`, `CMSCOUT_WORD_DIFF`, `CMSCOUT_ADDED_STYLE`, `CMSCOUT_REMOVED_STYLE`, and `CMSCOUT_KEEP_UNCHANGED` environment variables. See the script for details.
 
 
 ## License
