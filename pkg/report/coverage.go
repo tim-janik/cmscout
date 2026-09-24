@@ -34,7 +34,7 @@ func (r *TextReporter) beginPair(p *ir.CorrelatedPair) {
 	if r.coveredNew == nil {
 		r.coveredNew = make(map[int]bool)
 	}
-	if r.Opts.SkipUnchanged && isCompletelyUnchanged(p, r.movedPairs[p]) {
+	if r.Opts.SkipUnchanged && r.isCompletelyUnchanged(p, r.movedPairs[p]) {
 		if p.Old != nil && p.Old.Span.StartByte < p.Old.Span.EndByte {
 			r.skippedOldSpans = append(r.skippedOldSpans, p.Old.Span)
 		}

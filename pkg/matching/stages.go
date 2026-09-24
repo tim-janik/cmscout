@@ -150,7 +150,7 @@ func MatchBlocks(oldBlocks, newBlocks []ir.SemanticBlock, threshold float64) ([]
 	pairs = append(pairs, matchesToPairs(restOld, restNew, restMatches)...)
 
 	// Stage 3d: rescue hoisted inner callables across scopes when both containers are orphaned;
-	// rules in hoisted.go, rationale in [../../doc/pipeline.md](pipeline.md).
+	// rules in hoisted.go, rationale in [doc/pipeline.md](../../doc/pipeline.md).
 	rescuePairs := hoistedCallableMatches(oldPtrs, newPtrs, usedOld, usedNew, oldByID, newByID, oldKey, newKey)
 	pairs = append(pairs, rescuePairs...)
 	// Rescued callables may themselves contain nested named functions:

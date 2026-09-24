@@ -10,7 +10,7 @@ import (
 )
 
 // DefaultWordDiffSpanThreshold: collapse a line's word diff to one span when more than this
-// fraction of its words changed. Span policy: [../../doc/word-diff.md](word-diff.md).
+// fraction of its words changed. Span policy: [doc/word-diff.md](../../doc/word-diff.md).
 const DefaultWordDiffSpanThreshold = 0.4
 
 // Options controls diff behaviour.
@@ -206,15 +206,8 @@ func hasWordDiffChanges(words []ir.DiffWord) bool {
 	return false
 }
 
-// computeWordDiff computes a word-level diff between two lines.
-// When ignoreSpace is true, whitespace-only word differences are suppressed
-// (they are treated as context, so ~<TAB>~ is not emitted for whitespace-only changes).
-//
-// Changed words are consolidated into consecutive spans (git --word-diff
-// style): each maximal run of changed words renders as ONE removed span and
-// ONE added span, with common prefix/suffix words trimmed to context. When
-// more than spanThreshold of the line's words changed, all runs merge into a
-// single span covering the whole changed range.
+// computeWordDiff computes the word-level diff of two lines; ignoreSpace suppresses
+// whitespace-only word differences. Span consolidation policy: [doc/word-diff.md](../../doc/word-diff.md).
 func computeWordDiff(oldLine, newLine string, ignoreSpace bool, spanThreshold float64) []ir.DiffWord {
 	oldWords := splitWords(oldLine)
 	newWords := splitWords(newLine)
@@ -446,30 +439,6 @@ func joinWords(words []ir.DiffWord) string {
 		b.WriteString(w.Text)
 	}
 	return b.String()
-}
-
-// backtrackWord: rebuild ops from the LCS table, appended in reverse (avoids quadratic prepending).
-func backtrackWord(lcs [][]int, a, b []string) ([]diffOp, []diffOp) {
-	var oldDiff, newDiff []diffOp
-	i := len(a)
-	j := len(b)
-	for i > 0 || j > 0 {
-		if i > 0 && j > 0 && a[i-1] == b[j-1] {
-			oldDiff = append(oldDiff, diffOp{Type: opContext, Content: a[i-1]})
-			newDiff = append(newDiff, diffOp{Type: opContext, Content: b[j-1]})
-			i--
-			j--
-		} else if j > 0 && (i == 0 || lcs[i][j-1] >= lcs[i-1][j]) {
-			newDiff = append(newDiff, diffOp{Type: opAdd, Content: b[j-1]})
-			j--
-		} else {
-			oldDiff = append(oldDiff, diffOp{Type: opDel, Content: a[i-1]})
-			i--
-		}
-	}
-	reverseOps(oldDiff)
-	reverseOps(newDiff)
-	return oldDiff, newDiff
 }
 
 // splitLines splits source text into individual lines.

@@ -125,7 +125,7 @@ func runSemanticReview(cf compareFlags, summary, skipUnchanged bool, addedStyle,
 			correlate.AttachPrefixComments(result)
 
 			// Comments strictly inside a function-like container already render there; a
-			// standalone entry would duplicate. See [../../doc/enclosed-comments.md](enclosed-comments.md).
+			// standalone entry would duplicate. See [doc/enclosed-comments.md](../../doc/enclosed-comments.md).
 			correlate.SuppressEnclosedComments(result)
 
 			// Diff matched pairs last: the report's displayed similarity derives from this final text.
@@ -156,6 +156,7 @@ func runSemanticReview(cf compareFlags, summary, skipUnchanged bool, addedStyle,
 		NoColor:       cf.noColor,
 		SummaryOnly:   summary,
 		SkipUnchanged: skipUnchanged,
+		IgnoreSpace:   cf.ignoreSpace,
 		AddedStyle:    addedStyle,
 		RemovedStyle:  removedStyle,
 	}, result, cf.oldName, cf.newName)
@@ -173,6 +174,7 @@ func runSimpleDiff(cf compareFlags, summary, skipUnchanged bool, addedStyle, rem
 		NoColor:       cf.noColor,
 		SummaryOnly:   summary,
 		SkipUnchanged: skipUnchanged,
+		IgnoreSpace:   cf.ignoreSpace,
 		AddedStyle:    addedStyle,
 		RemovedStyle:  removedStyle,
 	}, &ir.CorrelationResult{

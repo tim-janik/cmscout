@@ -610,6 +610,44 @@ func TestSkipUnchangedFlag(t *testing.T) {
 	}
 }
 
+// TestSkipUnchangedIgnoresWhitespaceOnlyPairs: --skip-unchanged suppresses whitespace-only
+// pairs instead of rendering "(no structural changes)"; the summary still counts Whitespace.
+// Real changes and moved blocks keep rendering.
+func TestSkipUnchangedIgnoresWhitespaceOnlyPairs(t *testing.T) {
+	skipIfNoParser(t)
+
+	dir := t.TempDir()
+	oldPath := writeFile(t, dir, "old.c", "int foo() {\n  return 1;\n}\nint bar() {\n  return 2;\n}\n")
+	newPath := writeFile(t, dir, "new.c", "int foo() {\n\treturn 1;\n}\nint bar() {\n    return 2;\n}\n")
+
+	// Whitespace-only function bodies must not render as "(no structural changes)".
+	out := runTool(t, "--no-color", "--skip-unchanged", "--ignore-all-space", oldPath, newPath)
+	if strings.Contains(out, "(no structural changes)") {
+		t.Errorf("whitespace-only blocks must be suppressed with --skip-unchanged --ignore-all-space:\n%s", out)
+	}
+	if strings.Contains(out, "foo") || strings.Contains(out, "bar") {
+		t.Errorf("whitespace-only function pairs must not render at all:\n%s", out)
+	}
+	// The summary still counts the whitespace-only pairs.
+	if !strings.Contains(out, "Whitespace: 2") {
+		t.Errorf("summary should still count whitespace-only pairs:\n%s", out)
+	}
+
+	// Control: without --ignore-all-space, the whitespace diff stays visible and tagged.
+	out = runTool(t, "--no-color", "--skip-unchanged", oldPath, newPath)
+	if !strings.Contains(out, "[whitespace]") {
+		t.Errorf("without --ignore-all-space the whitespace change must render with a [whitespace] tag:\n%s", out)
+	}
+
+	// Control: a real change still renders under the combined flags.
+	changedOld := writeFile(t, dir, "changed-old.c", "int foo() {\n  return 1;\n}\n")
+	changedNew := writeFile(t, dir, "changed-new.c", "int foo() {\n  return 42;\n}\n")
+	out = runTool(t, "--no-color", "--skip-unchanged", "--ignore-all-space", changedOld, changedNew)
+	if !strings.Contains(out, "return 42;") {
+		t.Errorf("a real change must still render under --skip-unchanged --ignore-all-space:\n%s", out)
+	}
+}
+
 // assertCoverage checks side-aware, occurrence-aware coverage for both inputs.
 func assertCoverage(t *testing.T, cmd, output, oldSrc, newSrc string) {
 	t.Helper()

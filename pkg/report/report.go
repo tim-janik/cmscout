@@ -9,6 +9,10 @@ type Options struct {
 	SummaryOnly   bool // show only the summary
 	SkipUnchanged bool // suppress entirely unchanged blocks in the detailed listing
 
+	// IgnoreSpace treats whitespace-only differences as unchanged: with SkipUnchanged,
+	// pairs whose only difference is whitespace the diff already normalized are suppressed.
+	IgnoreSpace bool
+
 	// OldLanguage/NewLanguage select the whitespace-classification rules for each side
 	// (blank = language-neutral scanner; C++ raw strings and Go backticks are atomic).
 	OldLanguage string

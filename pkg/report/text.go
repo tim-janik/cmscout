@@ -14,7 +14,7 @@ import (
 )
 
 // WordDiffStyle configures markers and colors for word-level highlights; fields are editable,
-// e.g. "{+"/"+}" instead of "+"/"~". Defaults and examples: [../../doc/word-diff.md](word-diff.md).
+// e.g. "{+"/"+}" instead of "+"/"~". Defaults and examples: [doc/word-diff.md](../../doc/word-diff.md).
 var WordDiffStyle = struct {
 	AddedPrefix   string
 	AddedSuffix   string
@@ -72,14 +72,16 @@ type TextReporter struct {
 	classContainers map[string]*ir.SemanticBlock
 }
 
-// isCompletelyUnchanged: identical source, name, position ⇒ no review signal; whole-file
-// pairs ignore the name; moved pairs always render.
-func isCompletelyUnchanged(p *ir.CorrelatedPair, moved bool) bool {
+// isCompletelyUnchanged: identical source, name and position give no review signal; whole-file
+// pairs ignore the name, moved pairs always render, IgnoreSpace counts normalized-equal as same.
+func (r *TextReporter) isCompletelyUnchanged(p *ir.CorrelatedPair, moved bool) bool {
 	if p.Supplemental || p.Old == nil || p.New == nil {
 		return false
 	}
 	if p.Old.Source != p.New.Source {
-		return false
+		if !(r.Opts.IgnoreSpace && p.InnerDiff != nil && !p.InnerDiff.HasChanges()) {
+			return false
+		}
 	}
 	if p.Old.Kind != ir.KindUnknown && ((p.Old.Name != p.New.Name && !sameAnonymousNumberedName(p)) || moved) {
 		return false
@@ -265,7 +267,7 @@ func (r *TextReporter) writeGroup(b *strings.Builder, c color, kind ir.BlockKind
 func (r *TextReporter) writePair(b *strings.Builder, c color, p *ir.CorrelatedPair) {
 	r.beginPair(p)
 	// --skip-unchanged suppresses identical blocks (summary still counts them); moved blocks always render.
-	if r.Opts.SkipUnchanged && isCompletelyUnchanged(p, r.movedPairs[p]) {
+	if r.Opts.SkipUnchanged && r.isCompletelyUnchanged(p, r.movedPairs[p]) {
 		return
 	}
 	// One-sided class members render only in the class diff.
@@ -723,14 +725,27 @@ func (r *TextReporter) writeSummary(b *strings.Builder, c color, result *ir.Corr
 	}
 
 	b.WriteString(fmt.Sprintf("%sSummary%s\n", c.bold, c.reset))
-	b.WriteString(fmt.Sprintf("  Matched:   %d\n", matched))
-	b.WriteString(fmt.Sprintf("  Unchanged: %s%d%s\n", c.gray, unchanged, c.reset))
-	b.WriteString(fmt.Sprintf("  Changed:   %s%d%s\n", c.yellow, changed, c.reset))
-	b.WriteString(fmt.Sprintf("  Renamed:   %s%d%s\n", c.magenta, renamed, c.reset))
-	b.WriteString(fmt.Sprintf("  Moved:     %s%d%s\n", c.cyan, moved, c.reset))
-	b.WriteString(fmt.Sprintf("  Added:     %s%d%s\n", c.green, added, c.reset))
-	b.WriteString(fmt.Sprintf("  Removed:   %s%d%s\n", c.red, removed, c.reset))
-	// Whitespace counter only when there is at least one such change.
+	if added > 0 {
+		b.WriteString(fmt.Sprintf("  Added:     %s%d%s\n", c.green, added, c.reset))
+	}
+	if removed > 0 {
+		b.WriteString(fmt.Sprintf("  Removed:   %s%d%s\n", c.red, removed, c.reset))
+	}
+	if renamed > 0 {
+		b.WriteString(fmt.Sprintf("  Renamed:   %s%d%s\n", c.magenta, renamed, c.reset))
+	}
+	if moved > 0 {
+		b.WriteString(fmt.Sprintf("  Moved:     %s%d%s\n", c.cyan, moved, c.reset))
+	}
+	if changed > 0 {
+		b.WriteString(fmt.Sprintf("  Changed:   %s%d%s\n", c.yellow, changed, c.reset))
+	}
+	if matched > 0 {
+		b.WriteString(fmt.Sprintf("  Matched:   %d\n", matched))
+	}
+	if unchanged > 0 {
+		b.WriteString(fmt.Sprintf("  Unchanged: %s%d%s\n", c.gray, unchanged, c.reset))
+	}
 	if whitespace > 0 {
 		b.WriteString(fmt.Sprintf("  Whitespace: %s%d%s\n", c.gray, whitespace, c.reset))
 	}
