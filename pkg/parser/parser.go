@@ -165,7 +165,7 @@ func (a *AST) Source() []byte { return a.src }
 // Language returns the language this AST was parsed with.
 func (a *AST) Language() lang.Language { return a.lang }
 
-// ErrorCount counts "ERROR"/"MISSING" nodes: a non-zero count means extraction is
+// ErrorCount counts error and missing nodes: a non-zero count means extraction is
 // incomplete and must be surfaced. One-time walk; well-formed files return 0 directly.
 func (a *AST) ErrorCount() int {
 	root := a.RootNode()
@@ -175,15 +175,15 @@ func (a *AST) ErrorCount() int {
 	return countErrors(root)
 }
 
-// countErrors recursively counts ERROR and MISSING nodes, including
-// anonymous/extra children so recovery nodes are not missed.
+// countErrors recursively counts error and missing nodes, including
+// anonymous/extra children so recovery nodes are not missed. Missing nodes
+// carry the kind of the token they stand in for, so IsMissing is required.
 func countErrors(n *tree_sitter.Node) int {
 	if n == nil {
 		return 0
 	}
 	count := 0
-	switch n.Kind() {
-	case "ERROR", "MISSING":
+	if n.IsError() || n.IsMissing() {
 		count++
 	}
 	for i := uint(0); i < n.ChildCount(); i++ {

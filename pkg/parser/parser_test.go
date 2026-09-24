@@ -118,3 +118,18 @@ func TestAST_ErrorCount_ShortCircuitOnClean(t *testing.T) {
 		t.Errorf("clean source ErrorCount=%d, want 0", ast.ErrorCount())
 	}
 }
+
+// TestAST_ErrorCount_MissingToken: a missing token gets the kind of the token
+// it stands in for (e.g. ";"), never "MISSING"; it must still count as a parse
+// error so the report's "Parse Errors" row covers dropped semicolons.
+func TestAST_ErrorCount_MissingToken(t *testing.T) {
+	for _, src := range []string{
+		"int x = 1",
+		"int f() { return 0 }",
+	} {
+		ast := parseSrc(t, "c", src)
+		if n := ast.ErrorCount(); n < 1 {
+			t.Errorf("c source %q: ErrorCount=%d, want >= 1", src, n)
+		}
+	}
+}
