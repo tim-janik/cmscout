@@ -3,7 +3,6 @@
 package parser
 
 import (
-	"context"
 	"testing"
 
 	"cmscout/pkg/lang"
@@ -18,7 +17,7 @@ func parseSrc(t *testing.T, name, src string) *AST {
 		t.Skipf("parser not available for %q: %v", name, err)
 	}
 	defer p.Close()
-	ast, err := p.Parse(context.Background(), []byte(src))
+	ast, err := p.Parse([]byte(src))
 	if err != nil {
 		t.Fatalf("Parse returned error for %q: %v", name, err)
 	}

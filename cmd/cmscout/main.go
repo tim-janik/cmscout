@@ -5,7 +5,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -256,7 +255,7 @@ func parseAndExtractLanguage(src, path string, langCode lang.Language, separateM
 	defer p.Close()
 
 	// Parse
-	ast, err := p.Parse(context.Background(), []byte(src))
+	ast, err := p.Parse([]byte(src))
 	if err != nil {
 		return nil, err
 	}
