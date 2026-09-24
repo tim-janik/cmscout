@@ -54,12 +54,18 @@ func hoistedCallableMatches(
 	oldKey, newKey map[*ir.SemanticBlock]int,
 ) []ir.CorrelatedPair {
 	oldGroups := make(map[string][]int)
+	var groupOrder []string
+	seenName := make(map[string]bool)
 	for i, b := range oldPtrs {
 		if usedOld[i] || b.Name == "" || !hoistedCallableKind(b.Kind) ||
 			nearestContainer(b, oldByID) == nil {
 			continue
 		}
 		oldGroups[b.Name] = append(oldGroups[b.Name], i)
+		if !seenName[b.Name] {
+			groupOrder = append(groupOrder, b.Name)
+			seenName[b.Name] = true
+		}
 	}
 	newGroups := make(map[string][]int)
 	for j, b := range newPtrs {
@@ -70,8 +76,23 @@ func hoistedCallableMatches(
 		newGroups[b.Name] = append(newGroups[b.Name], j)
 	}
 
+	// Orphan status is decided once, before matching: results must not depend on match order.
+	oldOrphan := make([]bool, len(oldPtrs))
+	for _, indexes := range oldGroups {
+		for _, i := range indexes {
+			oldOrphan[i] = containerOrphaned(oldPtrs[i], oldByID, usedOld, oldKey)
+		}
+	}
+	newOrphan := make([]bool, len(newPtrs))
+	for _, indexes := range newGroups {
+		for _, j := range indexes {
+			newOrphan[j] = containerOrphaned(newPtrs[j], newByID, usedNew, newKey)
+		}
+	}
+
 	var pairs []ir.CorrelatedPair
-	for name, oldIndexes := range oldGroups {
+	for _, name := range groupOrder {
+		oldIndexes := oldGroups[name]
 		newIndexes := newGroups[name]
 		if len(newIndexes) == 0 {
 			continue
@@ -80,8 +101,7 @@ func hoistedCallableMatches(
 		for i, oi := range oldIndexes {
 			table[i] = make([]float64, len(newIndexes))
 			for j, nj := range newIndexes {
-				if !containerOrphaned(oldPtrs[oi], oldByID, usedOld, oldKey) ||
-					!containerOrphaned(newPtrs[nj], newByID, usedNew, newKey) {
+				if !oldOrphan[oi] || !newOrphan[nj] {
 					table[i][j] = ineligibleSim
 					continue
 				}
