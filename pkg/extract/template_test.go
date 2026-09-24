@@ -167,3 +167,18 @@ func TestTemplateExtraction_VoidElements(t *testing.T) {
 		t.Errorf("template blocks = %q, want img,br", got)
 	}
 }
+
+func TestTemplateExtraction_VoidElementsIgnoreCase(t *testing.T) {
+	for _, name := range []string{"INPUT", "InPuT"} {
+		src := "html`<div><" + name + "><span>x</span></div>`;"
+		blocks := templateBlocks(t, src)
+		if len(blocks) != 1 || blocks[0].Name != "div" {
+			t.Errorf("source %q: expected one div block, got %v", src, blocks)
+		}
+	}
+
+	blocks := templateBlocks(t, "html`<IMG>`;")
+	if len(blocks) != 1 || blocks[0].Name != "IMG" {
+		t.Errorf("expected one IMG block, got %v", blocks)
+	}
+}
