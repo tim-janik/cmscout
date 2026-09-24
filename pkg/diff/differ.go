@@ -17,7 +17,6 @@ const DefaultWordDiffSpanThreshold = 0.4
 type Options struct {
 	WordDiff    bool // split into words and diff at word granularity
 	IgnoreSpace bool // ignore all whitespace when comparing lines/words
-	FullContext bool // include unchanged lines outside change hunks
 	// Fraction of changed words above which the word diff renders as one span.
 	// 0 uses DefaultWordDiffSpanThreshold; a negative value disables the collapse.
 	WordDiffSpanThreshold float64
@@ -99,7 +98,7 @@ func (d *Differ) Diff(oldSource, newSource string) *ir.DiffResult {
 	oldLines := splitLines(oldSource)
 	newLines := splitLines(newSource)
 
-	hunks := computeHunksWithContext(oldLines, newLines, d.opts.FullContext, d.opts.IgnoreSpace)
+	hunks := computeHunks(oldLines, newLines, d.opts.IgnoreSpace)
 
 	// Word diff runs on the original lines (even under ignore-all-space) so highlights match the file.
 	if d.opts.WordDiff {
@@ -111,13 +110,6 @@ func (d *Differ) Diff(oldSource, newSource string) *ir.DiffResult {
 	}
 
 	return &ir.DiffResult{Hunks: hunks}
-}
-
-// DiffFull: same diff with full context, for whole-file reports (coverage contract).
-func (d *Differ) DiffFull(oldSource, newSource string) *ir.DiffResult {
-	full := *d
-	full.opts.FullContext = true
-	return full.Diff(oldSource, newSource)
 }
 
 // applyWordDiff: word diffs on normalization-hidden context lines and on the added line of replacement pairs.
@@ -453,8 +445,8 @@ func splitLines(s string) []string {
 	return lines
 }
 
-// computeHunksWithContext: LCS hunks; emitted content is always the ORIGINAL line text (both raw forms under ignore-space).
-func computeHunksWithContext(oldLines, newLines []string, fullContext, ignoreSpace bool) []ir.DiffHunk {
+// computeHunks: LCS hunks; emitted content is always the ORIGINAL line text (both raw forms under ignore-space).
+func computeHunks(oldLines, newLines []string, ignoreSpace bool) []ir.DiffHunk {
 	cmpOld := normalizeLines(oldLines, ignoreSpace)
 	cmpNew := normalizeLines(newLines, ignoreSpace)
 	if equalLines(cmpOld, cmpNew) {
@@ -467,7 +459,7 @@ func computeHunksWithContext(oldLines, newLines []string, fullContext, ignoreSpa
 	// Full LCS always computed: no coarse fallback for large inputs.
 	lcs := computeLCS(cmpOld, cmpNew)
 	oldDiff, newDiff := backtrack(lcs, cmpOld, cmpNew, oldLines, newLines)
-	return groupHunksWithContext(oldDiff, newDiff, fullContext)
+	return groupHunks(oldDiff, newDiff)
 }
 
 // whitespaceOnlyHunk: all-context hunk carrying both raw forms (NewBlank marks a line that became blank).
@@ -578,8 +570,8 @@ type diffOp struct {
 	NewNo   int
 }
 
-// groupHunksWithContext: ≤3 context lines per change (or one full-span hunk with fullContext).
-func groupHunksWithContext(oldDiff, newDiff []diffOp, fullContext bool) []ir.DiffHunk {
+// groupHunks: one full-span hunk carrying every merged entry (whole-file report coverage).
+func groupHunks(oldDiff, newDiff []diffOp) []ir.DiffHunk {
 	type entry struct {
 		op         diffOpType
 		content    string
@@ -624,75 +616,47 @@ func groupHunksWithContext(oldDiff, newDiff []diffOp, fullContext bool) []ir.Dif
 		}
 	}
 
-	const contextSize = 3
-	type span struct{ start, end int }
-	var spans []span
-	if fullContext {
-		if len(merged) > 0 {
-			spans = append(spans, span{start: 0, end: len(merged)})
+	if len(merged) == 0 {
+		return nil
+	}
+	hunk := ir.DiffHunk{}
+	for _, entry := range merged {
+		lineType := ir.DiffLineContext
+		switch entry.op {
+		case opAdd:
+			lineType = ir.DiffLineAdded
+		case opDel:
+			lineType = ir.DiffLineRemoved
 		}
-	} else {
-		for i, entry := range merged {
-			if entry.op == opContext {
-				continue
-			}
-			start := max(0, i-contextSize)
-			end := i + contextSize + 1
-			if end > len(merged) {
-				end = len(merged)
-			}
-			if len(spans) > 0 && start <= spans[len(spans)-1].end {
-				if end > spans[len(spans)-1].end {
-					spans[len(spans)-1].end = end
-				}
-				continue
-			}
-			spans = append(spans, span{start: start, end: end})
+		hunk.Lines = append(hunk.Lines, ir.DiffLine{
+			Content:    entry.content,
+			Type:       lineType,
+			OldNo:      entry.oldNo,
+			NewNo:      entry.newNo,
+			NewContent: entry.newContent,
+			NewBlank:   entry.newBlank,
+		})
+		switch lineType {
+		case ir.DiffLineRemoved:
+			hunk.OldLines++
+		case ir.DiffLineAdded:
+			hunk.NewLines++
+		default:
+			hunk.OldLines++
+			hunk.NewLines++
 		}
 	}
-
-	hunks := make([]ir.DiffHunk, 0, len(spans))
-	for _, s := range spans {
-		hunk := ir.DiffHunk{}
-		for _, entry := range merged[s.start:s.end] {
-			lineType := ir.DiffLineContext
-			switch entry.op {
-			case opAdd:
-				lineType = ir.DiffLineAdded
-			case opDel:
-				lineType = ir.DiffLineRemoved
-			}
-			hunk.Lines = append(hunk.Lines, ir.DiffLine{
-				Content:    entry.content,
-				Type:       lineType,
-				OldNo:      entry.oldNo,
-				NewNo:      entry.newNo,
-				NewContent: entry.newContent,
-				NewBlank:   entry.newBlank,
-			})
-			switch lineType {
-			case ir.DiffLineRemoved:
-				hunk.OldLines++
-			case ir.DiffLineAdded:
-				hunk.NewLines++
-			default:
-				hunk.OldLines++
-				hunk.NewLines++
-			}
+	for _, line := range hunk.Lines {
+		if line.OldNo > 0 {
+			hunk.OldStart = line.OldNo
+			break
 		}
-		for _, line := range hunk.Lines {
-			if line.OldNo > 0 {
-				hunk.OldStart = line.OldNo
-				break
-			}
-		}
-		for _, line := range hunk.Lines {
-			if line.NewNo > 0 {
-				hunk.NewStart = line.NewNo
-				break
-			}
-		}
-		hunks = append(hunks, hunk)
 	}
-	return hunks
+	for _, line := range hunk.Lines {
+		if line.NewNo > 0 {
+			hunk.NewStart = line.NewNo
+			break
+		}
+	}
+	return []ir.DiffHunk{hunk}
 }

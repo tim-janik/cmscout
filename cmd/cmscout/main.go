@@ -73,12 +73,11 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 
 // runSemanticReview runs the full pipeline (detect → parse → extract → match → correlate → diff → report).
 func runSemanticReview(cf compareFlags, summary, skipUnchanged bool, addedStyle, removedStyle string, oldSrc, newSrc string, stdout io.Writer) error {
-	// Build pipeline with full context (the coverage supplement needs complete line representation).
+	// Build pipeline with shared word-diff and ignore-space options.
 	d := diff.NewWithOpts(diff.Options{
 		WordDiff:              cf.wordDiff,
 		WordDiffSpanThreshold: cf.wordDiffSpanThreshold,
 		IgnoreSpace:           cf.ignoreSpace,
-		FullContext:           true,
 	})
 
 	// Detect language support first: an unsupported side falls back without being parsed.
@@ -143,7 +142,7 @@ func runSemanticReview(cf compareFlags, summary, skipUnchanged bool, addedStyle,
 		result.Pairs = append(result.Pairs, ir.CorrelatedPair{
 			Old:          &ir.SemanticBlock{Source: oldSrc, Kind: ir.KindUnknown, Name: cf.oldName},
 			New:          &ir.SemanticBlock{Source: newSrc, Kind: ir.KindUnknown, Name: cf.newName},
-			InnerDiff:    d.DiffFull(oldSrc, newSrc),
+			InnerDiff:    d.Diff(oldSrc, newSrc),
 			Confidence:   1.0,
 			MatchType:    ir.MatchSimilarity,
 			Supplemental: true,
@@ -168,7 +167,7 @@ func runSimpleDiff(cf compareFlags, summary, skipUnchanged bool, addedStyle, rem
 		WordDiffSpanThreshold: cf.wordDiffSpanThreshold,
 		IgnoreSpace:           cf.ignoreSpace,
 	})
-	inner := d.DiffFull(oldSrc, newSrc)
+	inner := d.Diff(oldSrc, newSrc)
 	return writeReport(stdout, report.Options{
 		NoColor:       cf.noColor,
 		SummaryOnly:   summary,
@@ -189,7 +188,7 @@ func runSimpleDiff(cf compareFlags, summary, skipUnchanged bool, addedStyle, rem
 
 // synthesizeFallbackDiff builds a single whole-file diff for unsupported languages / no blocks (C2).
 func synthesizeFallbackDiff(oldSrc, newSrc, oldName, newName string, d *diff.Differ) *ir.CorrelationResult {
-	whole := d.DiffFull(oldSrc, newSrc)
+	whole := d.Diff(oldSrc, newSrc)
 	return &ir.CorrelationResult{
 		Pairs: []ir.CorrelatedPair{{
 			Old:        &ir.SemanticBlock{Source: oldSrc, Kind: ir.KindUnknown, Name: oldName},
