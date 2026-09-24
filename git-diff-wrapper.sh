@@ -61,24 +61,6 @@ else
   word_diff="--ignore-all-space"
 fi
 
-# /dev/null sides get an empty temp file so cmscout can read them.
-old_tmp=""
-new_tmp=""
-if [ "$old_content" = "/dev/null" ] || [ ! -f "$old_content" ]; then
-  old_tmp=$(mktemp)
-  old_content="$old_tmp"
-fi
-if [ "$new_content" = "/dev/null" ] || [ ! -f "$new_content" ]; then
-  new_tmp=$(mktemp)
-  new_content="$new_tmp"
-fi
-
-cleanup() {
-  rm -f "$old_tmp" "$new_tmp"
-}
-trap cleanup EXIT
-
-# No exec: the EXIT trap must remove the /dev/null temp files after cmscout finishes.
 "$cmscout_bin" $no_color_flags $skip_flags $added_flags $removed_flags $word_diff \
     -B "$old_content" -A "$new_content" \
     "a/$old_name" "b/$new_name"
