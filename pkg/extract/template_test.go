@@ -8,7 +8,6 @@ package extract
 // and non-HTML templates stay untouched.
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -24,7 +23,7 @@ func extractBlocks(t *testing.T, src string) []ir.SemanticBlock {
 		t.Skipf("parser not available: %v", err)
 	}
 	defer p.Close()
-	ast, err := p.Parse(context.Background(), []byte(src))
+	ast, err := p.Parse([]byte(src))
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
