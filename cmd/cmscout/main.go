@@ -5,7 +5,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -66,20 +65,27 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		return fmt.Errorf("loading inputs: %w", err)
 	}
 
-	if simpleDiff {
-		return runSimpleDiff(cf, summary, skipUnchanged, addedStyle, removedStyle, oldSrc, newSrc, stdout)
+	opts := report.Options{
+		NoColor:       cf.noColor,
+		SummaryOnly:   summary,
+		SkipUnchanged: skipUnchanged,
+		IgnoreSpace:   cf.ignoreSpace,
+		AddedStyle:    addedStyle,
+		RemovedStyle:  removedStyle,
 	}
-	return runSemanticReview(cf, summary, skipUnchanged, addedStyle, removedStyle, oldSrc, newSrc, stdout)
+	if simpleDiff {
+		return runSimpleDiff(cf, opts, oldSrc, newSrc, stdout)
+	}
+	return runSemanticReview(cf, opts, oldSrc, newSrc, stdout)
 }
 
 // runSemanticReview runs the full pipeline (detect → parse → extract → match → correlate → diff → report).
-func runSemanticReview(cf compareFlags, summary, skipUnchanged bool, addedStyle, removedStyle string, oldSrc, newSrc string, stdout io.Writer) error {
-	// Build pipeline with full context (the coverage supplement needs complete line representation).
+func runSemanticReview(cf compareFlags, opts report.Options, oldSrc, newSrc string, stdout io.Writer) error {
+	// Build pipeline with shared word-diff and ignore-space options.
 	d := diff.NewWithOpts(diff.Options{
 		WordDiff:              cf.wordDiff,
 		WordDiffSpanThreshold: cf.wordDiffSpanThreshold,
 		IgnoreSpace:           cf.ignoreSpace,
-		FullContext:           true,
 	})
 
 	// Detect language support first: an unsupported side falls back without being parsed.
@@ -144,7 +150,7 @@ func runSemanticReview(cf compareFlags, summary, skipUnchanged bool, addedStyle,
 		result.Pairs = append(result.Pairs, ir.CorrelatedPair{
 			Old:          &ir.SemanticBlock{Source: oldSrc, Kind: ir.KindUnknown, Name: cf.oldName},
 			New:          &ir.SemanticBlock{Source: newSrc, Kind: ir.KindUnknown, Name: cf.newName},
-			InnerDiff:    d.DiffFull(oldSrc, newSrc),
+			InnerDiff:    d.Diff(oldSrc, newSrc),
 			Confidence:   1.0,
 			MatchType:    ir.MatchSimilarity,
 			Supplemental: true,
@@ -152,45 +158,22 @@ func runSemanticReview(cf compareFlags, summary, skipUnchanged bool, addedStyle,
 	}
 
 	// Report: print the git-style header; the reporter draws no header of its own.
-	return writeReport(stdout, report.Options{
-		NoColor:       cf.noColor,
-		SummaryOnly:   summary,
-		SkipUnchanged: skipUnchanged,
-		IgnoreSpace:   cf.ignoreSpace,
-		AddedStyle:    addedStyle,
-		RemovedStyle:  removedStyle,
-	}, result, cf.oldName, cf.newName)
+	return writeReport(stdout, opts, result, cf.oldName, cf.newName)
 }
 
 // runSimpleDiff emits a plain whole-file line diff, skipping the semantic pipeline entirely.
-func runSimpleDiff(cf compareFlags, summary, skipUnchanged bool, addedStyle, removedStyle string, oldSrc, newSrc string, stdout io.Writer) error {
+func runSimpleDiff(cf compareFlags, opts report.Options, oldSrc, newSrc string, stdout io.Writer) error {
 	d := diff.NewWithOpts(diff.Options{
 		WordDiff:              cf.wordDiff,
 		WordDiffSpanThreshold: cf.wordDiffSpanThreshold,
 		IgnoreSpace:           cf.ignoreSpace,
 	})
-	inner := d.DiffFull(oldSrc, newSrc)
-	return writeReport(stdout, report.Options{
-		NoColor:       cf.noColor,
-		SummaryOnly:   summary,
-		SkipUnchanged: skipUnchanged,
-		IgnoreSpace:   cf.ignoreSpace,
-		AddedStyle:    addedStyle,
-		RemovedStyle:  removedStyle,
-	}, &ir.CorrelationResult{
-		Pairs: []ir.CorrelatedPair{{
-			Old:        &ir.SemanticBlock{Source: oldSrc, Kind: ir.KindUnknown, Name: cf.oldName},
-			New:        &ir.SemanticBlock{Source: newSrc, Kind: ir.KindUnknown, Name: cf.newName},
-			InnerDiff:  inner,
-			Confidence: 1.0,
-			MatchType:  ir.MatchSimilarity,
-		}},
-	}, cf.oldName, cf.newName)
+	return writeReport(stdout, opts, synthesizeFallbackDiff(oldSrc, newSrc, cf.oldName, cf.newName, d), cf.oldName, cf.newName)
 }
 
 // synthesizeFallbackDiff builds a single whole-file diff for unsupported languages / no blocks (C2).
 func synthesizeFallbackDiff(oldSrc, newSrc, oldName, newName string, d *diff.Differ) *ir.CorrelationResult {
-	whole := d.DiffFull(oldSrc, newSrc)
+	whole := d.Diff(oldSrc, newSrc)
 	return &ir.CorrelationResult{
 		Pairs: []ir.CorrelatedPair{{
 			Old:        &ir.SemanticBlock{Source: oldSrc, Kind: ir.KindUnknown, Name: oldName},
@@ -215,7 +198,7 @@ func writeReport(stdout io.Writer, opts report.Options, result *ir.CorrelationRe
 	if _, err := fmt.Fprintf(stdout, "diff --cmscout %s %s\n", oldName, newName); err != nil {
 		return err
 	}
-	return r.Write(stdout, result, "", "")
+	return r.Write(stdout, result)
 }
 
 func parseAndExtract(src, path string, separateMacros bool) (*ir.SemanticDocument, error) {
@@ -256,7 +239,7 @@ func parseAndExtractLanguage(src, path string, langCode lang.Language, separateM
 	defer p.Close()
 
 	// Parse
-	ast, err := p.Parse(context.Background(), []byte(src))
+	ast, err := p.Parse([]byte(src))
 	if err != nil {
 		return nil, err
 	}

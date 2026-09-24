@@ -33,7 +33,7 @@ func TestTextReport_AddedRemoved(t *testing.T) {
 
 	r := &TextReporter{Opts: Options{NoColor: true}}
 	var buf bytes.Buffer
-	err := r.Write(&buf, result, "old.tsx", "new.tsx")
+	err := r.Write(&buf, result)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestTextReport_LambdaHeaderAndConverted(t *testing.T) {
 
 	r := &TextReporter{Opts: Options{NoColor: true}}
 	var buf bytes.Buffer
-	if err := r.Write(&buf, result, "old.cc", "new.cc"); err != nil {
+	if err := r.Write(&buf, result); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.String()
@@ -119,7 +119,7 @@ func TestTextReport_NoNamespaceSectionAndScopeTags(t *testing.T) {
 
 	r := &TextReporter{Opts: Options{NoColor: true}}
 	var buf bytes.Buffer
-	if err := r.Write(&buf, result, "old.cpp", "new.cpp"); err != nil {
+	if err := r.Write(&buf, result); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.String()
@@ -187,7 +187,7 @@ func TestTextReport_NestedAddedMemberInlineOnly(t *testing.T) {
 
 	r := &TextReporter{Opts: Options{NoColor: true}}
 	var buf bytes.Buffer
-	if err := r.Write(&buf, result, "loop.hh", "loop.hh"); err != nil {
+	if err := r.Write(&buf, result); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.String()
@@ -226,7 +226,7 @@ func TestTextReport_MatchedWithChanges(t *testing.T) {
 
 	r := &TextReporter{Opts: Options{NoColor: true}}
 	var buf bytes.Buffer
-	err := r.Write(&buf, result, "old.tsx", "new.tsx")
+	err := r.Write(&buf, result)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,7 +281,7 @@ func TestTextReport_SkipUnchanged(t *testing.T) {
 	for _, opts := range []Options{{NoColor: true}, {NoColor: true, SkipUnchanged: true}} {
 		r := &TextReporter{Opts: opts}
 		var buf bytes.Buffer
-		if err := r.Write(&buf, result, "old.tsx", "new.tsx"); err != nil {
+		if err := r.Write(&buf, result); err != nil {
 			t.Fatal(err)
 		}
 		output := buf.String()
@@ -335,7 +335,7 @@ func TestTextReport_EmptySectionsOmitted(t *testing.T) {
 	// header appears.
 	r := &TextReporter{Opts: Options{NoColor: true}}
 	var buf bytes.Buffer
-	if err := r.Write(&buf, result, "old.tsx", "new.tsx"); err != nil {
+	if err := r.Write(&buf, result); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(buf.String(), "Imports\n") {
@@ -346,7 +346,7 @@ func TestTextReport_EmptySectionsOmitted(t *testing.T) {
 	// be omitted entirely.
 	r = &TextReporter{Opts: Options{NoColor: true, SkipUnchanged: true}}
 	buf.Reset()
-	if err := r.Write(&buf, result, "old.tsx", "new.tsx"); err != nil {
+	if err := r.Write(&buf, result); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(buf.String(), "Imports") {
@@ -380,7 +380,7 @@ func TestTextReport_BlankDiffLinesOmitted(t *testing.T) {
 
 	r := &TextReporter{Opts: Options{NoColor: true}}
 	var buf bytes.Buffer
-	if err := r.Write(&buf, result, "old", "new"); err != nil {
+	if err := r.Write(&buf, result); err != nil {
 		t.Fatal(err)
 	}
 	output := buf.String()
@@ -429,7 +429,7 @@ func TestTextReport_SimilarityBelow100WhenChanged(t *testing.T) {
 
 	r := &TextReporter{Opts: Options{NoColor: true}}
 	var buf bytes.Buffer
-	if err := r.Write(&buf, &ir.CorrelationResult{Pairs: pairs}, "old.tsx", "new.tsx"); err != nil {
+	if err := r.Write(&buf, &ir.CorrelationResult{Pairs: pairs}); err != nil {
 		t.Fatal(err)
 	}
 	output := buf.String()
@@ -482,7 +482,7 @@ func TestTextReport_MovedDetection(t *testing.T) {
 
 	r := &TextReporter{Opts: Options{NoColor: true, SkipUnchanged: true}}
 	var buf bytes.Buffer
-	if err := r.Write(&buf, result, "old.tsx", "new.tsx"); err != nil {
+	if err := r.Write(&buf, result); err != nil {
 		t.Fatal(err)
 	}
 	output := buf.String()
@@ -518,7 +518,7 @@ func TestTextReport_Unchanged(t *testing.T) {
 
 	r := &TextReporter{Opts: Options{NoColor: true}}
 	var buf bytes.Buffer
-	err := r.Write(&buf, result, "old.tsx", "new.tsx")
+	err := r.Write(&buf, result)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -565,7 +565,7 @@ func TestTextReport_SummaryOnly(t *testing.T) {
 
 	r := &TextReporter{Opts: Options{NoColor: true, SummaryOnly: true}}
 	var buf bytes.Buffer
-	err := r.Write(&buf, result, "old.tsx", "new.tsx")
+	err := r.Write(&buf, result)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -622,7 +622,7 @@ func TestTextReport_MovedCounter(t *testing.T) {
 
 	r := &TextReporter{Opts: Options{NoColor: true}}
 	var buf bytes.Buffer
-	err := r.Write(&buf, result, "old.tsx", "new.tsx")
+	err := r.Write(&buf, result)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -654,7 +654,7 @@ func commentMovementReport(t *testing.T, pairs ...ir.CorrelatedPair) string {
 	result := &ir.CorrelationResult{Pairs: pairs}
 	r := &TextReporter{Opts: Options{NoColor: true}}
 	var buf bytes.Buffer
-	if err := r.Write(&buf, result, "old.ts", "new.ts"); err != nil {
+	if err := r.Write(&buf, result); err != nil {
 		t.Fatal(err)
 	}
 	return buf.String()
@@ -699,7 +699,7 @@ func TestTextReport_CommentMovedOutOfContainer(t *testing.T) {
 		MatchType:  ir.MatchExactName,
 		InnerDiff:  &ir.DiffResult{},
 	}
-	whole := diff.New().DiffFull(oldSrc, newSrc)
+	whole := diff.New().Diff(oldSrc, newSrc)
 	supplemental := ir.CorrelatedPair{
 		Old:          &ir.SemanticBlock{Kind: ir.KindUnknown, Name: "old.ts", Source: oldSrc},
 		New:          &ir.SemanticBlock{Kind: ir.KindUnknown, Name: "new.ts", Source: newSrc},
@@ -761,7 +761,7 @@ func TestTextReport_UnnamedMatchedHeaderFallsBackToKind(t *testing.T) {
 
 	r := &TextReporter{Opts: Options{NoColor: true}}
 	var buf bytes.Buffer
-	if err := r.Write(&buf, result, "old.tsx", "new.tsx"); err != nil {
+	if err := r.Write(&buf, result); err != nil {
 		t.Fatal(err)
 	}
 	output := buf.String()
@@ -858,7 +858,7 @@ func TestTextReport_CommentRewordedWhileMoving(t *testing.T) {
 		MatchType:  ir.MatchExactName,
 		InnerDiff:  &ir.DiffResult{},
 	}
-	whole := diff.New().DiffFull(oldSrc, newSrc)
+	whole := diff.New().Diff(oldSrc, newSrc)
 	supplemental := ir.CorrelatedPair{
 		Old:          &ir.SemanticBlock{Kind: ir.KindUnknown, Name: "old.ts", Source: oldSrc},
 		New:          &ir.SemanticBlock{Kind: ir.KindUnknown, Name: "new.ts", Source: newSrc},
@@ -913,7 +913,7 @@ func TestTextReport_DuplicateCommentTextNotHidden(t *testing.T) {
 		MatchType:  ir.MatchExactName,
 		InnerDiff:  &ir.DiffResult{},
 	}
-	whole := diff.New().DiffFull(oldSrc, newSrc)
+	whole := diff.New().Diff(oldSrc, newSrc)
 	supplemental := ir.CorrelatedPair{
 		Old:          &ir.SemanticBlock{Kind: ir.KindUnknown, Name: "old.ts", Source: oldSrc},
 		New:          &ir.SemanticBlock{Kind: ir.KindUnknown, Name: "new.ts", Source: newSrc},
@@ -966,7 +966,7 @@ func TestTextReport_DeterministicOrdering(t *testing.T) {
 	render := func() string {
 		r := &TextReporter{Opts: Options{NoColor: true}}
 		var buf bytes.Buffer
-		if err := r.Write(&buf, result, "old.tsx", "new.tsx"); err != nil {
+		if err := r.Write(&buf, result); err != nil {
 			t.Fatal(err)
 		}
 		return buf.String()
@@ -1238,7 +1238,7 @@ func TestSummary_WhitespaceClassificationLexical(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := &TextReporter{Opts: Options{NoColor: true}}
 			var buf bytes.Buffer
-			if err := r.Write(&buf, &ir.CorrelationResult{Pairs: []ir.CorrelatedPair{tc.pair}}, "old.ts", "new.ts"); err != nil {
+			if err := r.Write(&buf, &ir.CorrelationResult{Pairs: []ir.CorrelatedPair{tc.pair}}); err != nil {
 				t.Fatal(err)
 			}
 			out := buf.String()
@@ -1268,7 +1268,7 @@ func TestSummary_WhitespaceClassificationLexical(t *testing.T) {
 func TestTextReport_NewContentNewBlankRendering(t *testing.T) {
 	oldSrc := "a = 1\n   \n"
 	newSrc := "a=1\n\n"
-	whole := diff.NewWithOpts(diff.Options{IgnoreSpace: true}).DiffFull(oldSrc, newSrc)
+	whole := diff.NewWithOpts(diff.Options{IgnoreSpace: true}).Diff(oldSrc, newSrc)
 
 	// Sanity: the whole-file diff is a whitespace-only hunk whose second
 	// line is a context line with an empty new raw form (NewBlank).
@@ -1288,7 +1288,7 @@ func TestTextReport_NewContentNewBlankRendering(t *testing.T) {
 	}}}
 	r := &TextReporter{Opts: Options{NoColor: true}}
 	var buf bytes.Buffer
-	if err := r.Write(&buf, result, "old.txt", "new.txt"); err != nil {
+	if err := r.Write(&buf, result); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.String()
@@ -1323,7 +1323,7 @@ func TestTextReport_ParseErrorsRow(t *testing.T) {
 	}
 	r := &TextReporter{Opts: Options{NoColor: true}}
 	var buf bytes.Buffer
-	if err := r.Write(&buf, withErrors, "old.tsx", "new.tsx"); err != nil {
+	if err := r.Write(&buf, withErrors); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.String()
@@ -1339,7 +1339,7 @@ func TestTextReport_ParseErrorsRow(t *testing.T) {
 	// indicator only appears when there is actually something to flag.
 	clean := &ir.CorrelationResult{Pairs: []ir.CorrelatedPair{}}
 	var buf2 bytes.Buffer
-	if err := r.Write(&buf2, clean, "old.tsx", "new.tsx"); err != nil {
+	if err := r.Write(&buf2, clean); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(buf2.String(), "Parse Errors:") {
@@ -1386,7 +1386,7 @@ func TestTextReport_Styles(t *testing.T) {
 	// Default: prefix colored, body white (c.reset before content).
 	r := &TextReporter{Opts: Options{}}
 	var buf bytes.Buffer
-	if err := r.Write(&buf, result, "old.js", "new.js"); err != nil {
+	if err := r.Write(&buf, result); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.String()
@@ -1407,7 +1407,7 @@ func TestTextReport_Styles(t *testing.T) {
 	// Full-line styles: entire "+"/"-" line takes the color.
 	r = &TextReporter{Opts: Options{AddedStyle: "green", RemovedStyle: "red"}}
 	buf.Reset()
-	if err := r.Write(&buf, result, "old.js", "new.js"); err != nil {
+	if err := r.Write(&buf, result); err != nil {
 		t.Fatal(err)
 	}
 	out = buf.String()
