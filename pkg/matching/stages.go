@@ -149,6 +149,15 @@ func MatchBlocks(oldBlocks, newBlocks []ir.SemanticBlock, threshold float64) ([]
 	}
 	pairs = append(pairs, matchesToPairs(restOld, restNew, restMatches)...)
 
+	// Stage 3d: rescue hoisted inner callables across scopes when both containers are orphaned;
+	// rules in hoisted.go, rationale in [../../doc/pipeline.md](pipeline.md).
+	rescuePairs := hoistedCallableMatches(oldPtrs, newPtrs, usedOld, usedNew, oldByID, newByID, oldKey, newKey)
+	pairs = append(pairs, rescuePairs...)
+	// Rescued callables may themselves contain nested named functions:
+	// match their children hierarchically like any other matched container pair.
+	rescueChildMatches := hierarchicalChildMatches(rescuePairs, oldPtrs, newPtrs, usedOld, usedNew, threshold, oldKey, newKey)
+	pairs = append(pairs, matchesToPairs(oldPtrs, newPtrs, rescueChildMatches)...)
+
 	// Stage 4: remaining comments pair via their own similarity table (never against code).
 	var commentOld, commentNew []*ir.SemanticBlock
 	for _, b := range oldRem {

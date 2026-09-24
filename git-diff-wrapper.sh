@@ -32,6 +32,12 @@ if [ "${CMDIFF_KEEP_UNCHANGED-}" = "1" ]; then
   skip_flags=""
 fi
 
+# NO_COLOR (https://no-color.org): when present and non-empty, disable ANSI color.
+no_color_flags=""
+if [ -n "${NO_COLOR-}" ]; then
+  no_color_flags="--no-color"
+fi
+
 # Added/removed body style flags (case separation for testing)
 # CMDIFF_ADDED_STYLE=white|green, CMDIFF_REMOVED_STYLE=white|red
 added_flags=""
@@ -67,6 +73,6 @@ cleanup() {
 trap cleanup EXIT
 
 # No exec: the EXIT trap must remove the /dev/null temp files after cmdiff finishes.
-"$cmdiff_bin" $skip_flags $added_flags $removed_flags $word_diff \
+"$cmdiff_bin" $no_color_flags $skip_flags $added_flags $removed_flags $word_diff \
     -B "$old_content" -A "$new_content" \
     "a/$old_name" "b/$new_name"

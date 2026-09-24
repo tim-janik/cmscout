@@ -27,6 +27,14 @@ line would attach and the start of the comment would be lost as diff context.
 - Enclosed comments (inside a component) are handled elsewhere in the report;
   this pass covers the "belongs to" case only.
 
+## Extraction-time run merging
+
+Single-line `//` comments merge into one run block during extraction
+(`mergeSingleLinePrefixRuns`, right after the AST walk) when they directly
+prefix a component with no blank line between. Without this merge a run is
+double-booked: partly inside the function prefix, partly a lone standalone
+comment.
+
 `main.go` calls the pass after `CollapseMatchedSubBlocks` and before word-level
 Diff so the InnerDiff includes the prefix text. Stage order:
 [doc/pipeline.md](pipeline.md). How absorbed comments interact with collapsed

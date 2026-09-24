@@ -124,6 +124,10 @@ func runSemanticReview(cf compareFlags, summary, skipUnchanged bool, addedStyle,
 			// as one diff unit; must run before Diff so the InnerDiff includes the prefix.
 			correlate.AttachPrefixComments(result)
 
+			// Comments strictly inside a function-like container already render there; a
+			// standalone entry would duplicate. See [../../doc/enclosed-comments.md](enclosed-comments.md).
+			correlate.SuppressEnclosedComments(result)
+
 			// Diff matched pairs last: the report's displayed similarity derives from this final text.
 			for i := range result.Pairs {
 				p := &result.Pairs[i]
