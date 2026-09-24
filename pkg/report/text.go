@@ -13,6 +13,24 @@ import (
 	"cmdiff/pkg/matching"
 )
 
+// WordDiffStyle configures markers and colors for word-level highlights; fields are editable,
+// e.g. "{+"/"+}" instead of "+"/"~". Defaults and examples: [../../doc/word-diff.md](word-diff.md).
+var WordDiffStyle = struct {
+	AddedPrefix   string
+	AddedSuffix   string
+	RemovedPrefix string
+	RemovedSuffix string
+	AddedColor    string
+	RemovedColor  string
+}{
+	AddedPrefix:   "+",
+	AddedSuffix:   "+",
+	RemovedPrefix: "~",
+	RemovedSuffix: "~",
+	AddedColor:    "green",
+	RemovedColor:  "red",
+}
+
 // TextReporter renders a text-based review report.
 type TextReporter struct {
 	Opts Options
@@ -463,13 +481,27 @@ func (r *TextReporter) writeDiffLine(b *strings.Builder, c color, line *ir.DiffL
 			r.writeWordDiffLine(b, c, line)
 			return
 		}
-		b.WriteString(fmt.Sprintf("%s+%s%s\n", c.green, c.reset, line.Content))
+		if r.Opts.AddedStyle == "green" {
+			b.WriteString(fmt.Sprintf("%s+%s\n", c.green, line.Content))
+		} else {
+			b.WriteString(fmt.Sprintf("%s+%s%s\n", c.green, c.reset, line.Content))
+		}
 	case ir.DiffLineRemoved:
+		// Word-diff paired removed lines are suppressed: the added line's
+		// combined word diff already shows the removed words inline.
+		if line.WordDiffPaired {
+			r.recordContent(oldSide, line.Content)
+			return
+		}
 		if r.suppress && r.shouldSuppressSide(oldSide, line.Content, line.OldNo, false) {
 			return
 		}
 		r.recordContent(oldSide, line.Content)
-		b.WriteString(fmt.Sprintf("%s-%s%s\n", c.red, c.reset, line.Content))
+		if r.Opts.RemovedStyle == "red" {
+			b.WriteString(fmt.Sprintf("%s-%s\n", c.red, line.Content))
+		} else {
+			b.WriteString(fmt.Sprintf("%s-%s%s\n", c.red, c.reset, line.Content))
+		}
 	default:
 		// Context: under --ignore-all-space, both raw forms are emitted (old text never masquerades as new).
 		newContent := line.Content
@@ -525,19 +557,46 @@ func (r *TextReporter) supplementLineAlreadyShown(line *ir.DiffLine) bool {
 	}
 }
 
-// writeWordDiffLine: green added / red ~removed~ / plain context words; prefix matches line type.
+// wordDiffColor resolves a WordDiffStyle color name to the actual ANSI code.
+func wordDiffColor(c color, name string, fallback string) string {
+	switch strings.ToLower(name) {
+	case "red":
+		return c.red
+	case "green":
+		return c.green
+	case "yellow":
+		return c.yellow
+	case "cyan":
+		return c.cyan
+	case "magenta":
+		return c.magenta
+	case "gray", "grey":
+		return c.gray
+	case "bold":
+		return c.bold
+	case "":
+		return fallback
+	default:
+		return fallback
+	}
+}
+
+// writeWordDiffLine renders word-level highlights using WordDiffStyle markers and colors;
+// the line prefix matches the line type (" " context, "+" added).
 func (r *TextReporter) writeWordDiffLine(b *strings.Builder, c color, line *ir.DiffLine) {
 	prefix := " "
 	if line.Type == ir.DiffLineAdded {
 		prefix = "+"
 	}
 	b.WriteString(fmt.Sprintf("%s%s%s", c.gray, prefix, c.reset))
+	addedColor := wordDiffColor(c, WordDiffStyle.AddedColor, c.green)
+	removedColor := wordDiffColor(c, WordDiffStyle.RemovedColor, c.red)
 	for _, w := range line.Words {
 		switch w.Type {
 		case ir.DiffWordAdded:
-			b.WriteString(fmt.Sprintf("%s%s%s", c.green, w.Text, c.reset))
+			b.WriteString(fmt.Sprintf("%s%s%s%s%s", addedColor, WordDiffStyle.AddedPrefix, w.Text, WordDiffStyle.AddedSuffix, c.reset))
 		case ir.DiffWordRemoved:
-			b.WriteString(fmt.Sprintf("%s~%s~%s", c.red, w.Text, c.reset))
+			b.WriteString(fmt.Sprintf("%s%s%s%s%s", removedColor, WordDiffStyle.RemovedPrefix, w.Text, WordDiffStyle.RemovedSuffix, c.reset))
 		default:
 			b.WriteString(w.Text)
 		}
@@ -546,12 +605,36 @@ func (r *TextReporter) writeWordDiffLine(b *strings.Builder, c color, line *ir.D
 }
 
 func (r *TextReporter) writeSource(b *strings.Builder, c color, source string, col string, prefix, side string) {
+	// Body coloring: default white text with colored '+'/'-' prefix only; AddedStyle="green"
+	// or RemovedStyle="red" restore legacy full-line coloring.
+	bodyIsWhite := true
+	if col == c.green {
+		// Added block
+		style := r.Opts.AddedStyle
+		if style == "" {
+			style = "white"
+		}
+		bodyIsWhite = (style == "white")
+	} else if col == c.red {
+		// Removed block
+		style := r.Opts.RemovedStyle
+		if style == "" {
+			style = "white"
+		}
+		bodyIsWhite = (style == "white")
+	}
 	for _, line := range strings.Split(source, "\n") {
 		if line == "" {
 			continue
 		}
 		r.recordContent(side, line)
-		b.WriteString(fmt.Sprintf("%s%s%s%s\n", col, prefix, c.reset, line))
+		if bodyIsWhite {
+			// Only the prefix is colored, body is white (readable).
+			b.WriteString(fmt.Sprintf("%s%s%s%s\n", col, prefix, c.reset, line))
+		} else {
+			// Legacy: entire line colored (prefix + body same color).
+			b.WriteString(fmt.Sprintf("%s%s%s\n", col, prefix, line))
+		}
 	}
 }
 

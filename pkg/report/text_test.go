@@ -1340,3 +1340,82 @@ func TestTextReport_ParseErrorsRow(t *testing.T) {
 		t.Errorf("clean result should not include a Parse Errors row:\n%s", buf2.String())
 	}
 }
+
+// TestTextReport_Styles: --added-style/--removed-style color the body of ALL "+"/"-" lines,
+// full added/removed blocks (writeSource) and inner diff lines (writeDiffLine) alike.
+func TestTextReport_Styles(t *testing.T) {
+	const (
+		green = "\033[32m"
+		red   = "\033[31m"
+		reset = "\033[0m"
+	)
+	result := &ir.CorrelationResult{
+		Pairs: []ir.CorrelatedPair{
+			// Matched pair: inner diff carries the removed/added body lines.
+			{
+				Old:        &ir.SemanticBlock{Kind: ir.KindFunction, Name: "f", Source: "function f() { return 1; }"},
+				New:        &ir.SemanticBlock{Kind: ir.KindFunction, Name: "f", Source: "function f() { return 2; }"},
+				Confidence: 1.0,
+				MatchType:  ir.MatchExactName,
+				InnerDiff: &ir.DiffResult{
+					Hunks: []ir.DiffHunk{
+						{
+							OldStart: 1, OldLines: 3, NewStart: 1, NewLines: 3,
+							Lines: []ir.DiffLine{
+								{Content: "function f() {", Type: ir.DiffLineContext, OldNo: 1, NewNo: 1},
+								{Content: "  return 1;", Type: ir.DiffLineRemoved, OldNo: 2},
+								{Content: "  return 2;", Type: ir.DiffLineAdded, NewNo: 2},
+								{Content: "}", Type: ir.DiffLineContext, OldNo: 3, NewNo: 3},
+							},
+						},
+					},
+				},
+			},
+			// Unmatched blocks: writeSource path.
+			{Old: nil, New: &ir.SemanticBlock{Kind: ir.KindFunction, Name: "brandNew", Source: "function brandNew() {}"}, Confidence: 0.0, MatchType: ir.MatchNone},
+			{Old: &ir.SemanticBlock{Kind: ir.KindFunction, Name: "goner", Source: "function goner() {}"}, New: nil, Confidence: 0.0, MatchType: ir.MatchNone},
+		},
+	}
+
+	// Default: prefix colored, body white (c.reset before content).
+	r := &TextReporter{Opts: Options{}}
+	var buf bytes.Buffer
+	if err := r.Write(&buf, result, "old.js", "new.js"); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		green + "+" + reset + "  return 2;",
+		red + "-" + reset + "  return 1;",
+		green + "+" + reset + "function brandNew() {}",
+		red + "-" + reset + "function goner() {}",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("default style: missing %q\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, green+"+  return 2;") || strings.Contains(out, red+"-  return 1;") {
+		t.Errorf("default style must keep body white, got:\n%s", out)
+	}
+
+	// Full-line styles: entire "+"/"-" line takes the color.
+	r = &TextReporter{Opts: Options{AddedStyle: "green", RemovedStyle: "red"}}
+	buf.Reset()
+	if err := r.Write(&buf, result, "old.js", "new.js"); err != nil {
+		t.Fatal(err)
+	}
+	out = buf.String()
+	for _, want := range []string{
+		green + "+  return 2;",
+		red + "-  return 1;",
+		green + "+function brandNew() {}",
+		red + "-function goner() {}",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("full-line style: missing %q\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, green+"+"+reset+"  return 2;") {
+		t.Errorf("green style must not reset after the prefix, got:\n%s", out)
+	}
+}

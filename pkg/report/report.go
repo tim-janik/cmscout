@@ -13,6 +13,11 @@ type Options struct {
 	// (blank = language-neutral scanner; C++ raw strings and Go backticks are atomic).
 	OldLanguage string
 	NewLanguage string
+
+	// AddedStyle: "white" colors only the '+' prefix (default), "green" the whole line.
+	AddedStyle string
+	// RemovedStyle: "white" colors only the '-' prefix (default), "red" the whole line.
+	RemovedStyle string
 }
 
 // color holds ANSI escape sequences for terminal output.

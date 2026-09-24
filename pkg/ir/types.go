@@ -78,10 +78,21 @@ const (
 	DiffWordRemoved                     // word only in old
 )
 
+// DiffWordSide records which side(s) own a context word: matched words belong to both sides,
+// one-sided whitespace words render as context but own one side, so spans rebuild exactly.
+type DiffWordSide int
+
+const (
+	DiffWordSideBoth DiffWordSide = iota // word present in both lines
+	DiffWordSideOld                      // word only present in the old line
+	DiffWordSideNew                      // word only present in the new line
+)
+
 // DiffWord represents a single word in a word-level diff.
 type DiffWord struct {
 	Text string       // the word text
 	Type DiffWordType // context, added, or removed
+	Side DiffWordSide // which side(s) own a context word (DiffWordSideBoth otherwise)
 }
 
 // DiffLine represents a single line in a diff.
@@ -99,6 +110,10 @@ type DiffLine struct {
 
 	// NewBlank: the new-side context line is blank (vs. identical raw text).
 	NewBlank bool
+
+	// WordDiffPaired: a removed line that is part of a word-diff replacement pair;
+	// it is suppressed in the report (the added line carries the combined word diff).
+	WordDiffPaired bool
 }
 
 // DiffHunk represents a contiguous section of a diff.
