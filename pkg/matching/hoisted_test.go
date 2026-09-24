@@ -3,6 +3,7 @@
 package matching
 
 import (
+	"strings"
 	"testing"
 
 	"cmscout/pkg/ir"
@@ -217,5 +218,85 @@ func TestMatchBlocks_HoistedInnerCallable_NestedChildren(t *testing.T) {
 	if pairs[0].Old == nil || pairs[0].New == nil ||
 		pairs[0].Old.Name != "dblclick" || pairs[0].New.Name != "dblclick" {
 		t.Fatalf("expected dblclick pair, got %+v", pairs)
+	}
+}
+
+// TestMatchBlocks_HoistedInnerCallable_StableOutput: a class whose methods became
+// nested functions must pair identically on every run (map iteration order leaked
+// into pair order).
+func TestMatchBlocks_HoistedInnerCallable_StableOutput(t *testing.T) {
+	old := []ir.SemanticBlock{
+		hoistedTestBlock(ir.KindClass, "AlphaList",
+			"class AlphaList extends LitComponent { render () { return html; } }", ""),
+		hoistedTestBlock(ir.KindMethod, "alpha1", "alpha1() { return one; }", "\x00class:AlphaList"),
+		hoistedTestBlock(ir.KindMethod, "alpha2", "alpha2() { return two; }", "\x00class:AlphaList"),
+		hoistedTestBlock(ir.KindMethod, "alpha3", "alpha3() { return three; }", "\x00class:AlphaList"),
+		hoistedTestBlock(ir.KindMethod, "alpha4", "alpha4() { return four; }", "\x00class:AlphaList"),
+		hoistedTestBlock(ir.KindMethod, "alpha5", "alpha5() { return five; }", "\x00class:AlphaList"),
+	}
+	new := []ir.SemanticBlock{
+		hoistedTestBlock(ir.KindFunction, "alphaView",
+			"export function alphaView (props) { return props.bind_view (); }", ""),
+		hoistedTestBlock(ir.KindFunction, "alpha1", "function alpha1 () { return props.first; }", "\x00function:alphaView"),
+		hoistedTestBlock(ir.KindFunction, "alpha2", "function alpha2 () { return props.second; }", "\x00function:alphaView"),
+		hoistedTestBlock(ir.KindFunction, "alpha3", "function alpha3 () { return props.third; }", "\x00function:alphaView"),
+		hoistedTestBlock(ir.KindFunction, "alpha4", "function alpha4 () { return props.fourth; }", "\x00function:alphaView"),
+		hoistedTestBlock(ir.KindFunction, "alpha5", "function alpha5 () { return props.fifth; }", "\x00function:alphaView"),
+	}
+
+	var first []string
+	for run := 0; run < 30; run++ {
+		pairs, _, _ := MatchBlocks(old, new, SimilarityThreshold)
+		var names []string
+		for i := range pairs {
+			names = append(names, pairs[i].Old.Name)
+		}
+		got := strings.Join(names, ",")
+		if run == 0 {
+			first = names
+			if got != "alpha1,alpha2,alpha3,alpha4,alpha5" {
+				t.Fatalf("rescue pairs in old-block order, got %q", got)
+			}
+			continue
+		}
+		if got != strings.Join(first, ",") {
+			t.Fatalf("run %d pair order %q differs from first run %q", run, got, first)
+		}
+	}
+}
+
+// TestMatchBlocks_HoistedInnerCallable_OrphanStatusFixedBeforeMatch: orphan status
+// is decided before matching, so rescuing a callable cannot disqualify the nested
+// callables it contains.
+func TestMatchBlocks_HoistedInnerCallable_OrphanStatusFixedBeforeMatch(t *testing.T) {
+	oldOne := hoistedTestBlock(ir.KindClass, "AlphaOne",
+		"class AlphaOne {\n  dblclick (event) { console.log (event.type); }\n}", "")
+	oldDbl := hoistedTestBlock(ir.KindMethod, "dblclick",
+		"dblclick (event) { console.log (event.type); }", oldOne.ID)
+	oldTwo := hoistedTestBlock(ir.KindClass, "AlphaTwo",
+		"class AlphaTwo {\n  helper (n) { collect(n); }\n}", "")
+	oldHelp := hoistedTestBlock(ir.KindMethod, "helper",
+		"helper (n) { collect(n); }", oldTwo.ID)
+	newShell := hoistedTestBlock(ir.KindFunction, "Shell",
+		"export function Shell (props) {\n  function dblclick (event) {\n    function helper(n) { collect(n); }\n    helper(0);\n  }\n}", "")
+	newDbl := hoistedTestBlock(ir.KindFunction, "dblclick",
+		"function dblclick (event) {\n    function helper(n) { collect(n); }\n    helper(0);\n  }", newShell.ID)
+	newHelp := hoistedTestBlock(ir.KindFunction, "helper",
+		"function helper(n) { collect(n); }", newDbl.ID)
+	old := []ir.SemanticBlock{oldOne, oldDbl, oldTwo, oldHelp}
+	new := []ir.SemanticBlock{newShell, newDbl, newHelp}
+
+	pairs, _, _ := MatchBlocks(old, new, SimilarityThreshold)
+	matched := map[string]bool{}
+	for i := range pairs {
+		if pairs[i].Old != nil && pairs[i].New != nil {
+			matched[pairs[i].Old.Name] = true
+		}
+	}
+	if !matched["dblclick"] {
+		t.Errorf("dblclick must pair across orphaned containers, got %+v", pairs)
+	}
+	if !matched["helper"] {
+		t.Errorf("helper must pair even though its container pairs in the same stage, got %+v", pairs)
 	}
 }
