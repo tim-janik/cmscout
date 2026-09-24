@@ -699,7 +699,7 @@ func TestTextReport_CommentMovedOutOfContainer(t *testing.T) {
 		MatchType:  ir.MatchExactName,
 		InnerDiff:  &ir.DiffResult{},
 	}
-	whole := diff.New().DiffFull(oldSrc, newSrc)
+	whole := diff.New().Diff(oldSrc, newSrc)
 	supplemental := ir.CorrelatedPair{
 		Old:          &ir.SemanticBlock{Kind: ir.KindUnknown, Name: "old.ts", Source: oldSrc},
 		New:          &ir.SemanticBlock{Kind: ir.KindUnknown, Name: "new.ts", Source: newSrc},
@@ -858,7 +858,7 @@ func TestTextReport_CommentRewordedWhileMoving(t *testing.T) {
 		MatchType:  ir.MatchExactName,
 		InnerDiff:  &ir.DiffResult{},
 	}
-	whole := diff.New().DiffFull(oldSrc, newSrc)
+	whole := diff.New().Diff(oldSrc, newSrc)
 	supplemental := ir.CorrelatedPair{
 		Old:          &ir.SemanticBlock{Kind: ir.KindUnknown, Name: "old.ts", Source: oldSrc},
 		New:          &ir.SemanticBlock{Kind: ir.KindUnknown, Name: "new.ts", Source: newSrc},
@@ -913,7 +913,7 @@ func TestTextReport_DuplicateCommentTextNotHidden(t *testing.T) {
 		MatchType:  ir.MatchExactName,
 		InnerDiff:  &ir.DiffResult{},
 	}
-	whole := diff.New().DiffFull(oldSrc, newSrc)
+	whole := diff.New().Diff(oldSrc, newSrc)
 	supplemental := ir.CorrelatedPair{
 		Old:          &ir.SemanticBlock{Kind: ir.KindUnknown, Name: "old.ts", Source: oldSrc},
 		New:          &ir.SemanticBlock{Kind: ir.KindUnknown, Name: "new.ts", Source: newSrc},
@@ -1268,7 +1268,7 @@ func TestSummary_WhitespaceClassificationLexical(t *testing.T) {
 func TestTextReport_NewContentNewBlankRendering(t *testing.T) {
 	oldSrc := "a = 1\n   \n"
 	newSrc := "a=1\n\n"
-	whole := diff.NewWithOpts(diff.Options{IgnoreSpace: true}).DiffFull(oldSrc, newSrc)
+	whole := diff.NewWithOpts(diff.Options{IgnoreSpace: true}).Diff(oldSrc, newSrc)
 
 	// Sanity: the whole-file diff is a whitespace-only hunk whose second
 	// line is a context line with an empty new raw form (NewBlank).

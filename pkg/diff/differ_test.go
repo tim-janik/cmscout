@@ -234,20 +234,9 @@ func TestNormalizeForCompare(t *testing.T) {
 	}
 }
 
-func TestDiff_DistantChangesUseSeparateHunks(t *testing.T) {
+func TestDiff_IncludesUnchangedLinesOutsideHunks(t *testing.T) {
 	d := New()
-	old := "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\neleven\ntwelve"
-	new := "one\nTWO\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\nELEVEN\ntwelve"
-
-	result := d.Diff(old, new)
-	if len(result.Hunks) != 2 {
-		t.Fatalf("expected two distant hunks, got %d", len(result.Hunks))
-	}
-}
-
-func TestDiffFull_IncludesUnchangedLinesOutsideHunks(t *testing.T) {
-	d := New()
-	result := d.DiffFull("a\nb\nc\nd\ne", "a\nB\nc\nd\ne")
+	result := d.Diff("a\nb\nc\nd\ne", "a\nB\nc\nd\ne")
 	if len(result.Hunks) != 1 {
 		t.Fatalf("expected one full-context hunk, got %d", len(result.Hunks))
 	}
@@ -418,7 +407,7 @@ func TestDiff_LargeInputStaysAligned(t *testing.T) {
 	new[1234] = "line CHANGED"
 
 	d := New()
-	result := d.DiffFull(strings.Join(old, "\n"), strings.Join(new, "\n"))
+	result := d.Diff(strings.Join(old, "\n"), strings.Join(new, "\n"))
 	if !result.HasChanges() {
 		t.Fatal("large diff with one changed line must report changes")
 	}
@@ -452,7 +441,7 @@ func TestDiff_LargeInputStaysAligned(t *testing.T) {
 	// correct and reconstructable.
 	for _, opts := range []Options{{WordDiff: true}, {IgnoreSpace: true}, {WordDiff: true, IgnoreSpace: true}} {
 		dw := NewWithOpts(opts)
-		res := dw.DiffFull(strings.Join(old, "\n"), strings.Join(new, "\n"))
+		res := dw.Diff(strings.Join(old, "\n"), strings.Join(new, "\n"))
 		if !res.HasChanges() {
 			t.Errorf("opts %+v: large diff must report changes", opts)
 		}
@@ -647,7 +636,7 @@ quantize (const Buffer &buf, SampleFormat fmt)
 }`
 
 	d := NewWithOpts(Options{WordDiff: true, IgnoreSpace: true})
-	result := d.DiffFull(oldSrc, newSrc)
+	result := d.Diff(oldSrc, newSrc)
 
 	wordDiffLines := 0
 	for _, h := range result.Hunks {
