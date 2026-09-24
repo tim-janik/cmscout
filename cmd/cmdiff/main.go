@@ -111,8 +111,13 @@ func runSemanticReview(cf compareFlags, summary, skipUnchanged bool, oldSrc, new
 			// Staged hierarchical matching: exact identity → distance tables (see pkg/matching).
 			result = correlate.Correlate(oldDoc, newDoc)
 
-			// Collapse matched children into canonical reference comments (the only stage mutating pair sources).
+			// Collapse matched children into canonical reference comments. This and
+			// AttachPrefixComments are the only stages mutating pair sources.
 			correlate.CollapseMatchedSubBlocks(result)
+
+			// Attach prefix doc-comments (e.g. `/// Do foo` before `void foo()`) to the following component
+			// as one diff unit; must run before Diff so the InnerDiff includes the prefix.
+			correlate.AttachPrefixComments(result)
 
 			// Diff matched pairs last: the report's displayed similarity derives from this final text.
 			for i := range result.Pairs {

@@ -9,7 +9,7 @@ import (
 )
 
 // computeMovedPairs: pairs outside the old-vs-new order LCS were genuinely reordered;
-// comments move only when their enclosing container changed (never by rewording, F11).
+// comments move only when their enclosing container changed (never by rewording).
 func computeMovedPairs(pairs []ir.CorrelatedPair) map[*ir.CorrelatedPair]bool {
 	type entry struct {
 		ptr   *ir.CorrelatedPair

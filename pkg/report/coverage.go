@@ -133,7 +133,7 @@ func (r *TextReporter) shouldSuppressSide(side, content string, lineNo int, hide
 	if r.seenByOtherPair(side, content) && r.coveredLine(covered, lineNo) {
 		return true
 	}
-	// Indentation-only matches require a rendered COMMENT block owning the line (duplicates never hidden, F11).
+	// Indentation-only matches require a rendered COMMENT block owning the line (duplicates never hidden).
 	if trimmed := strings.TrimSpace(content); trimmed != "" &&
 		r.seenTrimmedByOtherPair(side, trimmed) && r.coveredCommentLine(side, lineNo) {
 		return true

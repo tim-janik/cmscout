@@ -191,7 +191,7 @@ func TestTextReport_NestedAddedMemberInlineOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := buf.String()
-	if !strings.Contains(out, "  +   std::shared_ptr<void> delay ();") {
+	if !strings.Contains(out, "+  std::shared_ptr<void> delay ();") {
 		t.Errorf("the added method must render inline in the class diff:\n%s", out)
 	}
 	if strings.Contains(out, "delay  [added]") {
@@ -354,9 +354,8 @@ func TestTextReport_EmptySectionsOmitted(t *testing.T) {
 	}
 }
 
-// TestTextReport_BlankDiffLinesOmitted verifies that blank lines inside a
-// diff (empty content) are not rendered as stray "  " / "+ " / "- " rows,
-// so components are not surrounded by excessive blank context lines.
+// TestTextReport_BlankDiffLinesOmitted: blank lines inside a diff render no stray
+// "  "/"+"/"-" rows, so components are not surrounded by excessive blank context.
 func TestTextReport_BlankDiffLinesOmitted(t *testing.T) {
 	result := &ir.CorrelationResult{
 
@@ -387,13 +386,13 @@ func TestTextReport_BlankDiffLinesOmitted(t *testing.T) {
 	output := buf.String()
 	t.Logf("report:\n%s", output)
 
-	for _, stray := range []string{"\n  - \n", "\n  + \n", "\n   \n"} {
+	for _, stray := range []string{"\n-\n", "\n+\n", "\n \n"} {
 		if strings.Contains(output, stray) {
 			t.Errorf("blank diff lines should not be rendered (found %q)\n%s", stray, output)
 		}
 	}
 	// The meaningful lines still render.
-	for _, want := range []string{"  - b", "  + x"} {
+	for _, want := range []string{"-b", "+x"} {
 		if !strings.Contains(output, want) {
 			t.Errorf("expected %q in output\n%s", want, output)
 		}
@@ -638,7 +637,7 @@ func TestTextReport_MovedCounter(t *testing.T) {
 }
 
 // commentMovementReport builds a report for a matched comment pair whose
-// enclosing container changed (F11). It mirrors the real pipeline's shape:
+// enclosing container changed. It mirrors the real pipeline's shape:
 // the container pairs carry their COLLAPSED sources (matched children
 // replaced by references, prefix comments absorbed), so the raw supplement
 // line of a moved comment differs from the semantic rendering only by
@@ -660,7 +659,7 @@ func commentMovementReport(t *testing.T, pairs ...ir.CorrelatedPair) string {
 // it renders with [moved], counts as Moved, and the coverage supplement
 // must NOT re-show the old indented comment line as a raw removal (its
 // only difference from the semantic rendering is indentation, and the
-// comment pair owns the line) (F11).
+// comment pair owns the line).
 func TestTextReport_CommentMovedOutOfContainer(t *testing.T) {
 	oldSrc := "class A {\n  // note\n  foo() {}\n}\n"
 	newSrc := "// note\nclass A {\n  foo() {}\n}\n"
@@ -717,12 +716,12 @@ func TestTextReport_CommentMovedOutOfContainer(t *testing.T) {
 	// The raw supplement must not duplicate the old comment line: it
 	// differs from the semantic context line only by indentation and the
 	// comment pair owns the line.
-	if strings.Contains(output, "-   // note") {
+	if strings.Contains(output, "-  // note") {
 		t.Errorf("supplement must not re-show the indented old comment as a raw removal:\n%s", output)
 	}
 	// The comment's content still renders once, as the semantic context
 	// line of the matched pair.
-	if !strings.Contains(output, "   // note") {
+	if !strings.Contains(output, " // note") {
 		t.Errorf("the comment must render as a semantic context line:\n%s", output)
 	}
 	// The nested method's raw line stays in the supplement (it is not
@@ -872,7 +871,7 @@ func TestTextReport_CommentRewordedWhileMoving(t *testing.T) {
 	if !strings.Contains(output, "Changed:   1") {
 		t.Errorf("the rewording must count as Changed:\n%s", output)
 	}
-	if strings.Contains(output, "-   // old note") || strings.Contains(output, "+   // new note") {
+	if strings.Contains(output, "-  // old note") || strings.Contains(output, "+  // new note") {
 		t.Errorf("supplement must not duplicate the reworded comment lines:\n%s", output)
 	}
 }
@@ -883,7 +882,7 @@ func TestTextReport_CommentRewordedWhileMoving(t *testing.T) {
 // indented line of the OTHER identical comment stays visible in the
 // supplement: the indentation-aware de-duplication requires the comment
 // pair to OWN the line (span), so a duplicate text elsewhere is never
-// hidden (F11).
+// hidden.
 func TestTextReport_DuplicateCommentTextNotHidden(t *testing.T) {
 	oldSrc := "class A {\n  // note\n  foo() {}\n}\n// note\n"
 	newSrc := "class A {\n  foo() {}\n}\n// note\n"
@@ -1007,7 +1006,7 @@ func TestWhitespaceClassificationLexical(t *testing.T) {
 		{"identifier boundary", "return value", "returnvalue", false},
 		{"mixed formatting plus semantic", "const s = \"a b\";\n", "  const s = \"ab\";\n", false},
 
-		// Multi-character operators are single tokens (F10).
+		// Multi-character operators are single tokens.
 		{"arrow split", "(x) => x", "(x) = > x", false},
 		{"optional chain split", "a?.b", "a ? .b", false},
 		{"strict equality split", "x === y", "x = = = y", false},
@@ -1027,7 +1026,7 @@ func TestWhitespaceClassificationLexical(t *testing.T) {
 		{"go channel spacing", "a <- b", "a<-b", true},
 		{"rest spacing", "f(...args)", "f( ... args )", true},
 
-		// Regex literals are atomic; division is punctuation (F10).
+		// Regex literals are atomic; division is punctuation.
 		{"regex content", "const r = /a b/;", "const r = /ab/;", false},
 		{"regex internal spacing", "const r = /a b/;", "const r = /a  b/;", false},
 		{"regex flags spacing", "const r = /a b/g;", "const r = /a b /g;", false},
@@ -1035,18 +1034,18 @@ func TestWhitespaceClassificationLexical(t *testing.T) {
 		{"division chain", "x = a / b / c;", "x = a/b/c;", true},
 		{"regex spacing", "const r = /a/;", "const r =  /a/;", true},
 
-		// Template interpolations are tokenized structurally (F10).
+		// Template interpolations are tokenized structurally.
 		{"interpolation spacing", "const t = `a ${x} b`;", "const t = `a ${ x } b`;", true},
 		{"interpolation member spacing", "const t = `a ${x.y} b`;", "const t = `a ${x . y} b`;", true},
 		{"interpolation expression change", "const t = `a ${x} b`;", "const t = `a ${y} b`;", false},
 		{"template text change", "const t = `a ${x} b`;", "const t = `a ${x} c`;", false},
 
 		// JSX text: word changes are semantic, spacing between words is
-		// formatting (F10 decision).
+		// formatting.
 		{"jsx word join", "<div>hello world</div>", "<div>helloworld</div>", false},
 		{"jsx text spacing", "<div>hello world</div>", "<div>hello  world</div>", true},
 
-		// Bash/Go comment and string forms (F10).
+		// Bash/Go comment and string forms.
 		{"bash comment wording", "# a b", "# ab", false},
 		{"bash comment spacing is content", "# a b", "# a  b", false},
 		{"go raw string", "const s = `a b`;", "const s = `ab`;", false},
@@ -1259,7 +1258,7 @@ func TestSummary_WhitespaceClassificationLexical(t *testing.T) {
 // TestTextReport_NewContentNewBlankRendering: the report renders both raw
 // forms of an ignore-all-space context line (old via Content, new via
 // NewContent) and never presents the old text as the new text; a blank new
-// raw line (NewBlank) contributes nothing beyond the old form (F14).
+// raw line (NewBlank) contributes nothing beyond the old form.
 func TestTextReport_NewContentNewBlankRendering(t *testing.T) {
 	oldSrc := "a = 1\n   \n"
 	newSrc := "a=1\n\n"
@@ -1291,18 +1290,19 @@ func TestTextReport_NewContentNewBlankRendering(t *testing.T) {
 
 	// Both raw forms of line 1 are rendered as context lines (the old text
 	// is never presented as the new text).
-	if !strings.Contains(out, "   a = 1") || !strings.Contains(out, "   a=1") {
+	if !strings.Contains(out, " a = 1") || !strings.Contains(out, " a=1") {
 		t.Errorf("both raw forms of the changed line must render:\n%s", out)
 	}
 	// The old whitespace-only line renders once as context; its blank new
 	// counterpart adds nothing.
-	if !strings.Contains(out, "      \n") {
+	if !strings.Contains(out, "    \n") {
 		t.Errorf("the old whitespace-only line must render:\n%s", out)
 	}
 	// No line may carry a + / - prefix for the normalized-equal pair.
-	if strings.Contains(out, "+ a = 1") || strings.Contains(out, "+   ") ||
-		strings.Contains(out, "- a = 1") {
-		t.Errorf("whitespace-only differences must render as context, not +/-:\n%s", out)
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "+") || strings.HasPrefix(line, "-") {
+			t.Errorf("whitespace-only differences must render as context, not +/-:\nline: %q\noutput:\n%s", line, out)
+		}
 	}
 }
 

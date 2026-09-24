@@ -344,34 +344,14 @@ type contentLine struct {
 	content string
 }
 
-// extractContentLines pulls the diff content lines out of a --no-color text
-// report. Content lines are the ones rendered by the diff/report layers:
-//
-//	"  + content"  (added)
-//	"  - content"  (removed)
-//	"   content"   (context, three spaces)
-//
-// Section headers, pair headers ("  @@ -1,2 +1,2 @@  name ..."), summary rows, and the
-// "diff --cmdiff" line are not content lines. Empty content (blank
-// lines in a diff) is skipped: the invariants concern non-empty lines.
+// extractContentLines returns non-empty +, -, and context rows from a report.
+// Headers and summary rows are ignored.
 func extractContentLines(output string) []contentLine {
 	var out []contentLine
 	for _, line := range strings.Split(output, "\n") {
-		var typ, content string
-		switch {
-		case strings.HasPrefix(line, "  + "):
-			typ, content = "added", line[4:]
-		case strings.HasPrefix(line, "  - "):
-			typ, content = "removed", line[4:]
-		case strings.HasPrefix(line, "   "):
-			typ, content = "context", line[3:]
-		default:
-			continue
+		if cl := contentLineOf(line); cl != nil {
+			out = append(out, *cl)
 		}
-		if content == "" {
-			continue
-		}
-		out = append(out, contentLine{typ: typ, content: content})
 	}
 	return out
 }
@@ -417,23 +397,26 @@ type section struct {
 	lines  []contentLine
 }
 
-// isSectionHeader reports whether a line starts a new section in a report
-// (kind headers, "Summary", the "diff --cmdiff" header, "Other", etc.).
-// Content lines always start with "  + ", "  - ", or "   ".
+// isSectionHeader reports whether a line starts a new report section (kind headers,
+// "Summary", "diff --cmdiff", "Other"); content lines always start with "+", "-", or " ".
 func isSectionHeader(line string) bool {
 	return contentLineOf(line) == nil
 }
 
 // contentLineOf parses one output line as a content line, or nil.
 func contentLineOf(line string) *contentLine {
+	trimmed := strings.TrimSpace(line)
+	if strings.HasPrefix(line, "  ") && isSummaryRow(trimmed) {
+		return nil
+	}
 	var typ, content string
 	switch {
-	case strings.HasPrefix(line, "  + "):
-		typ, content = "added", line[4:]
-	case strings.HasPrefix(line, "  - "):
-		typ, content = "removed", line[4:]
-	case strings.HasPrefix(line, "   "):
-		typ, content = "context", line[3:]
+	case strings.HasPrefix(line, "+"):
+		typ, content = "added", line[1:]
+	case strings.HasPrefix(line, "-"):
+		typ, content = "removed", line[1:]
+	case strings.HasPrefix(line, " "):
+		typ, content = "context", line[1:]
 	default:
 		return nil
 	}
@@ -441,6 +424,18 @@ func contentLineOf(line string) *contentLine {
 		return nil
 	}
 	return &contentLine{typ: typ, content: content}
+}
+
+func isSummaryRow(line string) bool {
+	for _, prefix := range []string{
+		"Matched:", "Unchanged:", "Changed:", "Renamed:", "Moved:",
+		"Added:", "Removed:", "Whitespace:", "Parse Errors:",
+	} {
+		if strings.HasPrefix(line, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // ---------------------------------------------------------------------------
@@ -474,19 +469,12 @@ func TestCoverageInvariant(t *testing.T) {
 	}
 }
 
-// headerPct matches a matched-pair header line and captures the displayed
-// similarity percentage:
-//
-//	"  @@ -63,186 +64,118 @@  spin_drag_pointermove  100% similarity  [moved]"
-var headerPct = regexp.MustCompile(`^  @@ -[0-9]+,[0-9]+ \+[0-9]+,[0-9]+ @@  .*  ([0-9]+)% similarity(  .*)?$`)
+// headerPct matches a matched-pair header line and captures the displayed percentage:
+// "@@ -63,186 +64,118 @@  spin_drag_pointermove  100% similarity  [moved]"
+var headerPct = regexp.MustCompile(`^@@ -[0-9]+,[0-9]+ \+[0-9]+,[0-9]+ @@  .*  ([0-9]+)% similarity(  .*)?$`)
 
-// blockMarker matches a standalone added/removed block marker, which has no
-// similarity header. The block name may contain spaces (e.g. import lists):
-//
-//	"  @@ -0,0 +294,14 @@  added  [added]"
-//	"  @@ -63,8 +0,0 @@  render  [removed]"
-//	"  @@ -0,0 +1,1 @@  import { a, b }  [added]"
-var blockMarker = regexp.MustCompile(`^  @@ -[0-9]+,[0-9]+ \+[0-9]+,[0-9]+ @@  .*  \[(added|removed)\]$`)
+// blockMarker matches a standalone added or removed block header.
+var blockMarker = regexp.MustCompile(`^@@ -[0-9]+,[0-9]+ \+[0-9]+,[0-9]+ @@  .*  \[(added|removed)\]$`)
 
 // assertHeaderSimilarityMatchesDiff checks that displayed percentages match the rendered diff.
 func assertHeaderSimilarityMatchesDiff(t *testing.T, output string) {
@@ -514,7 +502,7 @@ func assertHeaderSimilarityMatchesDiff(t *testing.T, output string) {
 		if !inPair {
 			continue
 		}
-		if strings.HasPrefix(line, "  + ") || strings.HasPrefix(line, "  - ") {
+		if strings.HasPrefix(line, "+") || strings.HasPrefix(line, "-") {
 			if pct == 100 && !whitespaceTagged {
 				t.Errorf("pair header claims 100%% similarity but its diff shows a change:\n%s\noutput:\n%s", line, output)
 			}
@@ -845,7 +833,7 @@ class B {
 	t.Logf("output:\n%s", out)
 
 	// The added B.foo method renders its real source inside the added class.
-	if !strings.Contains(out, "  +   foo() { return 2; }") {
+	if !strings.Contains(out, "+  foo() { return 2; }") {
 		t.Errorf("B.foo must render its real source inline in class B:\n%s", out)
 	}
 	// Unchanged A.foo folds to a reference inside matched class A.
@@ -882,7 +870,7 @@ class B {
 	t.Logf("output:\n%s", out)
 
 	// The removed B.foo method renders its real source inside the removed class.
-	if !strings.Contains(out, "  -   foo() { return 2; }") {
+	if !strings.Contains(out, "-  foo() { return 2; }") {
 		t.Errorf("B.foo must render its real source inline in removed class B:\n%s", out)
 	}
 	// Unchanged A.foo folds to a reference inside matched class A.
@@ -1127,7 +1115,7 @@ func TestChangedCommentInsideMatchedContainer(t *testing.T) {
 
 	// The reworded comment renders as a matched comment pair with its own
 	// before/after diff in the Comments section.
-	if !strings.Contains(out, "- // Handles pointerdown") || !strings.Contains(out, "+ // Handles pointerdown event") {
+	if !strings.Contains(out, "-// Handles pointerdown") || !strings.Contains(out, "+// Handles pointerdown event") {
 		t.Errorf("the changed comment must render as a matched comment diff:\n%s", out)
 	}
 	// It is never paired against the method (no comment/code assignment).
@@ -1147,6 +1135,138 @@ func TestChangedCommentInsideMatchedContainer(t *testing.T) {
 	}
 }
 
+// TestMultiLinePrefixCommentShownWhole: a changed multi-line prefix comment attaches to the
+// following function whole; without run expansion only the last `//` node would attach and
+// the comment start would be lost as diff context.
+func TestMultiLinePrefixCommentShownWhole(t *testing.T) {
+	skipIfNoParser(t)
+
+	old := "// Handles the pointer\n// down event for the widget\n// including wheel input\nfunction onDown() { return 1; }\n"
+	new := "// Handles the pointer\n// down event for the widget\n// including wheel and touch input\nfunction onDown() { return 1; }\n"
+
+	dir := t.TempDir()
+	oldPath := writeFile(t, dir, "old.ts", old)
+	newPath := writeFile(t, dir, "new.ts", new)
+
+	out := runTool(t, "--no-color", oldPath, newPath)
+	t.Logf("output:\n%s", out)
+
+	// The whole comment run renders inside the function pair: the two unchanged
+	// leading lines appear as context, the changed last line as -/+.
+	for _, want := range []string{" // Handles the pointer", " // down event for the widget", "-// including wheel input", "+// including wheel and touch input", "function onDown() { return 1; }"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in the function diff:\n%s", want, out)
+		}
+	}
+	// The start of the comment must not be lost: no standalone comment pairs remain.
+	for _, marker := range []string{"comment  [added]", "comment  [removed]", "comment  100% similarity"} {
+		if strings.Contains(out, marker) {
+			t.Errorf("prefix comment lines must attach to the function, found %q:\n%s", marker, out)
+		}
+	}
+	// Same requirement under --skip-unchanged: the changed prefix comment keeps
+	// its leading comment lines as context.
+	out = runTool(t, "--no-color", "--skip-unchanged", oldPath, newPath)
+	t.Logf("skip-unchanged output:\n%s", out)
+	for _, want := range []string{" // Handles the pointer", "-// including wheel input", "+// including wheel and touch input"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("--skip-unchanged: expected %q in the function diff:\n%s", want, out)
+		}
+	}
+	// The summary counts the comment rewording as one changed block.
+	if !strings.Contains(out, "Changed:   1") {
+		t.Errorf("the rewording must count as a single Changed block:\n%s", out)
+	}
+}
+
+// TestMultiLinePrefixCommentAdded: a whole added comment run attaches to the
+// following function, not just its last line.
+func TestMultiLinePrefixCommentAdded(t *testing.T) {
+	skipIfNoParser(t)
+
+	old := "function onDown() { return 1; }\n"
+	new := "// Handles the pointer\n// down event for the widget\n// including wheel input\nfunction onDown() { return 1; }\n"
+
+	dir := t.TempDir()
+	oldPath := writeFile(t, dir, "old.ts", old)
+	newPath := writeFile(t, dir, "new.ts", new)
+
+	out := runTool(t, "--no-color", oldPath, newPath)
+	t.Logf("output:\n%s", out)
+
+	for _, want := range []string{"+// Handles the pointer", "+// down event for the widget", "+// including wheel input", "function onDown() { return 1; }"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in the function diff:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "comment  [added]") {
+		t.Errorf("added prefix comment lines must attach to the function, not render standalone:\n%s", out)
+	}
+}
+
+// TestPrefixCounterpartNotCleanPrefixStaysStandalone: an added comment whose old counterpart
+// is not a clean prefix of the old component leaves the whole group standalone. Attaching only
+// the new side duplicated the comment text: component diff plus standalone pair.
+func TestPrefixCounterpartNotCleanPrefixStaysStandalone(t *testing.T) {
+	skipIfNoParser(t)
+
+	old := "// line1\n/* multi\n   line note */\n\nfunction onDown() { return 1; }\n"
+	new := "// line1\n/* multi\n   line note */\n// lineX\nfunction onDown() { return 1; }\n"
+
+	dir := t.TempDir()
+	oldPath := writeFile(t, dir, "old.ts", old)
+	newPath := writeFile(t, dir, "new.ts", new)
+
+	out := runTool(t, "--no-color", oldPath, newPath)
+	t.Logf("output:\n%s", out)
+
+	// No duplication: each comment line renders exactly once. An attached run side would
+	// appear twice: once in the component diff, once as a standalone pair.
+	for _, want := range []string{"// line1", "/* multi", "// lineX"} {
+		if strings.Count(out, want) != 1 {
+			t.Errorf("comment text %q must render exactly once:\n%s", want, out)
+		}
+	}
+	// The function pair must be untouched: no comment text inside its diff.
+	funcSection := strings.SplitN(out, "Comments", 2)[0]
+	if strings.Contains(funcSection, "// line1") || strings.Contains(funcSection, "/* multi") || strings.Contains(funcSection, "// lineX") {
+		t.Errorf("comments must stay standalone, not attach to the function:\n%s", funcSection)
+	}
+	// The added comment renders as a standalone added entry.
+	if !strings.Contains(out, "comment  [added]") {
+		t.Errorf("the added comment must render as a standalone added entry:\n%s", out)
+	}
+}
+
+// TestPrefixRewordedLastLineKeepsInsideComponent: a reworded last line below the similarity
+// threshold still attaches on both sides, so the reword surfaces inside the component diff
+// instead of standalone removed+added pairs; preceding lines never render twice.
+func TestPrefixRewordedLastLineKeepsInsideComponent(t *testing.T) {
+	skipIfNoParser(t)
+
+	old := "// line1\n// line2\nfunction onDown() { return 1; }\n"
+	new := "// line1\n// line2 changed\nfunction onDown() { return 1; }\n"
+
+	dir := t.TempDir()
+	oldPath := writeFile(t, dir, "old.ts", old)
+	newPath := writeFile(t, dir, "new.ts", new)
+
+	out := runTool(t, "--no-color", oldPath, newPath)
+	t.Logf("output:\n%s", out)
+
+	// The function diff must contain the whole comment run and the reword.
+	if !strings.Contains(out, "// line1") || !strings.Contains(out, "-// line2") || !strings.Contains(out, "+// line2 changed") || !strings.Contains(out, "onDown") {
+		t.Errorf("the reworded comment must render inside the function diff:\n%s", out)
+	}
+	// No standalone comment pairs: the preceding line is not duplicated.
+	if strings.Count(out, "// line1") != 1 {
+		t.Errorf("\"// line1\" must render exactly once:\n%s", out)
+	}
+	if strings.Contains(out, "comment  [removed]") || strings.Contains(out, "comment  [added]") {
+		t.Errorf("no standalone comment entries must remain:\n%s", out)
+	}
+}
+
 // TestRemovedPrefixCommentSurvivesCollapse keeps removed prefix comments visible.
 func TestRemovedPrefixCommentSurvivesCollapse(t *testing.T) {
 	skipIfNoParser(t)
@@ -1158,8 +1278,13 @@ func TestRemovedPrefixCommentSurvivesCollapse(t *testing.T) {
 	newPath := writeFile(t, dir, "new.ts", new)
 
 	out := runTool(t, "--no-color", oldPath, newPath)
-	if !strings.Contains(out, "comment  [removed]") || !strings.Contains(out, "Removed:   1") {
-		t.Errorf("a removed prefix comment must remain a semantic removal after collapse:\n%s", out)
+	// A removed doc-prefix renders as part of its component's diff rather than as
+	// a standalone removal; the Comments section no longer contains it.
+	if !strings.Contains(out, "foo") || !strings.Contains(out, "-// removed") {
+		t.Errorf("a removed prefix comment must appear inside its component's diff:\n%s", out)
+	}
+	if strings.Contains(out, "comment  [removed]") {
+		t.Errorf("removed prefix must not remain as a separate comment entry (now part of its component):\n%s", out)
 	}
 }
 
