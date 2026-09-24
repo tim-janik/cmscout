@@ -93,7 +93,7 @@ func scanElement(body string, i int) (int, int, bool) {
 		return 0, 0, false
 	}
 	j, selfClosing := skipOpenTag(body, j)
-	if selfClosing {
+	if selfClosing || isVoidElement(name) {
 		return i, j, true
 	}
 	stack := []string{name}
@@ -117,7 +117,7 @@ func scanElement(body string, i int) (int, int, bool) {
 				continue
 			}
 			m, selfClose := skipOpenTag(body, m)
-			if !selfClose {
+			if !selfClose && !isVoidElement(nested) {
 				stack = append(stack, nested)
 			}
 			k = m
@@ -227,6 +227,16 @@ func readTagName(body string, i int) (string, int) {
 
 func isTagStartByte(b byte) bool {
 	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z'
+}
+
+// isVoidElement reports whether the HTML tag never has a closing tag (self-closing).
+func isVoidElement(name string) bool {
+	switch name {
+	case "area", "base", "br", "col", "embed", "hr", "img", "input",
+		"link", "meta", "param", "source", "track", "wbr":
+		return true
+	}
+	return false
 }
 
 func isTagNameByte(b byte) bool {
