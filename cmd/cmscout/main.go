@@ -198,7 +198,7 @@ func writeReport(stdout io.Writer, opts report.Options, result *ir.CorrelationRe
 	if _, err := fmt.Fprintf(stdout, "diff --cmscout %s %s\n", oldName, newName); err != nil {
 		return err
 	}
-	return r.Write(stdout, result, "", "")
+	return r.Write(stdout, result)
 }
 
 func parseAndExtract(src, path string, separateMacros bool) (*ir.SemanticDocument, error) {

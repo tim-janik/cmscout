@@ -113,28 +113,12 @@ func diffSimilarity(p *ir.CorrelatedPair) float64 {
 }
 
 // Write renders the report to w.
-func (r *TextReporter) Write(w io.Writer, result *ir.CorrelationResult, oldPath, newPath string) error {
+func (r *TextReporter) Write(w io.Writer, result *ir.CorrelationResult) error {
 	if result == nil {
 		return fmt.Errorf("report: nil correlation result")
 	}
 	// Reset per-report state: a Reporter may be reused.
-	r.seen = nil
-	r.seenTrim = nil
-	r.pairID = ""
-	r.pairSeq = 0
-	r.suppress = false
-	r.coveredOld = nil
-	r.coveredNew = nil
-	r.coveredCommentOld = nil
-	r.coveredCommentNew = nil
-	r.skippedOldSpans = nil
-	r.skippedNewSpans = nil
-	r.oldSrc = ""
-	r.newSrc = ""
-	r.oldLineRanges = nil
-	r.newLineRanges = nil
-	r.movedPairs = nil
-	r.classContainers = nil
+	*r = TextReporter{Opts: r.Opts}
 
 	// The supplemental pair carries the raw inputs used for skip-unchanged byte-range bookkeeping.
 	for i := range result.Pairs {
@@ -152,15 +136,6 @@ func (r *TextReporter) Write(w io.Writer, result *ir.CorrelationResult, oldPath,
 
 	c := newColor(r.Opts.NoColor)
 	var b strings.Builder
-
-	// Header
-	if oldPath != "" || newPath != "" {
-		if oldPath == newPath || oldPath == "" {
-			b.WriteString(fmt.Sprintf("# %s\n\n", newPath))
-		} else {
-			b.WriteString(fmt.Sprintf("# %s → %s\n\n", oldPath, newPath))
-		}
-	}
 
 	// Group pairs by kind
 	groups := r.groupByKind(result)
