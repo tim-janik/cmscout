@@ -93,6 +93,9 @@ func scanElement(body string, i int) (int, int, bool) {
 		return 0, 0, false
 	}
 	j, selfClosing := skipOpenTag(body, j)
+	if j < 0 {
+		return 0, 0, false
+	}
 	if selfClosing || isVoidElement(name) {
 		return i, j, true
 	}
@@ -117,6 +120,9 @@ func scanElement(body string, i int) (int, int, bool) {
 				continue
 			}
 			m, selfClose := skipOpenTag(body, m)
+			if m < 0 {
+				return 0, 0, false
+			}
 			if !selfClose && !isVoidElement(nested) {
 				stack = append(stack, nested)
 			}
@@ -154,7 +160,7 @@ func skipOpenTag(body string, j int) (int, bool) {
 			k++
 		}
 	}
-	return len(body), false
+	return -1, false
 }
 
 // skipQuotedAttr scans a quoted attribute value, skipping ${...} (which may contain the quote char).
