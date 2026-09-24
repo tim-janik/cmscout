@@ -455,10 +455,6 @@ func (e *Extractor) tryExtract(node *tree_sitter.Node, src []byte, parentID stri
 		text, span = e.extendToTerminator(node, src, span)
 		return e.newBlock(ir.KindEnum, name, text, span, parentID), true
 
-	case "declaration":
-		// Recurse into C/C++ declarations to extract their declarators.
-		return nil, false
-
 	case "init_declarator":
 		if e.isInsideFunction(node) {
 			return nil, false

@@ -167,10 +167,6 @@ func (r *TextReporter) Write(w io.Writer, result *ir.CorrelationResult) error {
 			if len(groups[kind]) == 0 {
 				continue
 			}
-			// Namespaces are scope markers, not rendered components.
-			if kind == ir.KindNamespace {
-				continue
-			}
 			r.writeGroup(&b, c, kind, groups[kind])
 		}
 
@@ -183,6 +179,7 @@ func (r *TextReporter) Write(w io.Writer, result *ir.CorrelationResult) error {
 		}
 		sort.Slice(extraKinds, func(i, j int) bool { return extraKinds[i] < extraKinds[j] })
 		for _, kind := range extraKinds {
+			// Namespaces are scope markers, not rendered components.
 			if kind == ir.KindNamespace {
 				continue
 			}
