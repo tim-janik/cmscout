@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# Usage: CMCSOUT_KEEP_UNCHANGED=1 git -c diff.external=git-diff-wrapper.sh log --ext-diff -p
+# Usage: CMSCOUT_KEEP_UNCHANGED=1 git -c diff.external=git-diff-wrapper.sh log --ext-diff -p
 
 # Git external diff wrapper: maps git's protocol args ($1 path, $2/$5 content files,
 # $8 rename name) to `cmscout -B $2 -A $5 a/$1 b/${8-$1}`; -B/-A carry the contents.
@@ -34,7 +34,7 @@ fi
 
 # Skip-unchanged flag
 skip_flags="--skip-unchanged"
-if [ "${CMCSOUT_KEEP_UNCHANGED-}" = "1" ]; then
+if [ "${CMSCOUT_KEEP_UNCHANGED-}" = "1" ]; then
   skip_flags=""
 fi
 
@@ -45,17 +45,17 @@ if [ -n "${NO_COLOR-}" ]; then
 fi
 
 # Added/removed body style flags (case separation for testing)
-# CMCSOUT_ADDED_STYLE=white|green, CMCSOUT_REMOVED_STYLE=white|red
+# CMSCOUT_ADDED_STYLE=white|green, CMSCOUT_REMOVED_STYLE=white|red
 added_flags=""
-if [ -n "${CMCSOUT_ADDED_STYLE-}" ]; then
-  added_flags="--added-style=$CMCSOUT_ADDED_STYLE"
+if [ -n "${CMSCOUT_ADDED_STYLE-}" ]; then
+  added_flags="--added-style=$CMSCOUT_ADDED_STYLE"
 fi
 removed_flags="--removed-style=red"
-if [ -n "${CMCSOUT_REMOVED_STYLE-}" ]; then
-  removed_flags="--removed-style=$CMCSOUT_REMOVED_STYLE"
+if [ -n "${CMSCOUT_REMOVED_STYLE-}" ]; then
+  removed_flags="--removed-style=$CMSCOUT_REMOVED_STYLE"
 fi
 
-if [ -n "${CMCSOUT_WORD_DIFF-}" ]; then
+if [ -n "${CMSCOUT_WORD_DIFF-}" ]; then
   word_diff="--word-diff --ignore-all-space"
 else
   word_diff="--ignore-all-space"
