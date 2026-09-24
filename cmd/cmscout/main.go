@@ -11,19 +11,19 @@ import (
 	"io"
 	"os"
 
+	"cmscout/pkg/analysis"
 	"cmscout/pkg/correlate"
 	"cmscout/pkg/diff"
 	"cmscout/pkg/extract"
 	"cmscout/pkg/ir"
 	"cmscout/pkg/lang"
-	"cmscout/pkg/parser"
 	"cmscout/pkg/report"
 )
 
 func main() {
 	if err := run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
+		os.Exit(exit_code(err))
 	}
 }
 
@@ -32,6 +32,7 @@ func main() {
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	var (
 		cf            compareFlags
+		mf            metrics_flags
 		summary       bool
 		skipUnchanged bool
 		simpleDiff    bool
@@ -42,17 +43,40 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("cmscout", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cf.register(fs)
+	mf.register(fs)
 	fs.BoolVar(&summary, "summary", false, "show only summary statistics")
 	fs.BoolVar(&skipUnchanged, "skip-unchanged", false, "suppress entirely unchanged components (blocks identical on both sides)")
 	fs.BoolVar(&simpleDiff, "simple-diff", false, "skip semantic analysis: emit a plain whole-file line diff")
 	fs.StringVar(&addedStyle, "added-style", "white", "how to color added blocks: 'white' (only '+' green, body white, readable) or 'green' (entire line green)")
 	fs.StringVar(&removedStyle, "removed-style", "white", "how to color removed blocks: 'white' (only '-' red, body white) or 'red' (entire line red)")
-	fs.Usage = func() { printUsage(stdout) }
+	fs.Usage = func() {}
+	metrics_mode := metrics_requested(fs, args)
 	if err := fs.Parse(args); err != nil {
 		if err == flag.ErrHelp {
+			printUsage(stdout)
 			return nil
 		}
+		if mf.enabled || metrics_mode {
+			return metrics_error{err}
+		}
+		printUsage(stdout)
 		return err
+	}
+	if mf.enabled {
+		if err := mf.run(fs, cf, stdin, stdout); err != nil {
+			return metrics_error{err}
+		}
+		return nil
+	}
+	var metrics_only string
+	fs.Visit(func(option *flag.Flag) {
+		switch option.Name {
+		case "format", "root", "name", "stdin-name", "explain", "scan", "include", "exclude", "staged", "worktree", "revision", "base", "parent":
+			metrics_only = option.Name
+		}
+	})
+	if metrics_only != "" {
+		return fmt.Errorf("--%s requires --metrics", metrics_only)
 	}
 
 	oldContentPath, newContentPath, err := cf.resolve(fs.Args())
@@ -74,6 +98,11 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 
 // runSemanticReview runs the full pipeline (detect → parse → extract → match → correlate → diff → report).
 func runSemanticReview(cf compareFlags, summary, skipUnchanged bool, addedStyle, removedStyle string, oldSrc, newSrc string, stdout io.Writer) error {
+	return runSemanticReviewDocuments(cf, summary, skipUnchanged, addedStyle, removedStyle, oldSrc, newSrc, nil, nil, stdout)
+}
+
+func runSemanticReviewDocuments(cf compareFlags, summary, skipUnchanged bool, addedStyle, removedStyle string,
+	oldSrc, newSrc string, oldDoc, newDoc *ir.SemanticDocument, stdout io.Writer) error {
 	// Build pipeline with full context (the coverage supplement needs complete line representation).
 	d := diff.NewWithOpts(diff.Options{
 		WordDiff:              cf.wordDiff,
@@ -97,13 +126,19 @@ func runSemanticReview(cf compareFlags, summary, skipUnchanged bool, addedStyle,
 		usedFallback = true
 		result = synthesizeFallbackDiff(oldSrc, newSrc, cf.oldName, cf.newName, d)
 	} else {
-		oldDoc, err := parseAndExtract(oldSrc, cf.oldName, separateMacros)
-		if err != nil {
-			return fmt.Errorf("parsing old file: %w", err)
+		if oldDoc == nil {
+			var err error
+			oldDoc, err = parseAndExtract(oldSrc, cf.oldName, separateMacros)
+			if err != nil {
+				return fmt.Errorf("parsing old file: %w", err)
+			}
 		}
-		newDoc, err := parseAndExtract(newSrc, cf.newName, separateMacros)
-		if err != nil {
-			return fmt.Errorf("parsing new file: %w", err)
+		if newDoc == nil {
+			var err error
+			newDoc, err = parseAndExtract(newSrc, cf.newName, separateMacros)
+			if err != nil {
+				return fmt.Errorf("parsing new file: %w", err)
+			}
 		}
 
 		if len(oldDoc.Blocks) == 0 && len(newDoc.Blocks) == 0 {
@@ -219,57 +254,12 @@ func writeReport(stdout io.Writer, opts report.Options, result *ir.CorrelationRe
 }
 
 func parseAndExtract(src, path string, separateMacros bool) (*ir.SemanticDocument, error) {
-	// Reject undetected languages: parsing an unsupported file would fabricate parse errors.
-	langCode, ok := lang.Detect(path)
-	if !ok {
-		return nil, fmt.Errorf("unsupported language for %s", path)
-	}
-
-	// Choose C or C++ for .h files by parse recovery quality.
-	if langCode.Ext == ".h" {
-		cppDoc, cppErr := parseAndExtractLanguage(src, path, langCode, separateMacros)
-		cDoc, cErr := parseAndExtractLanguage(src, path, lang.Language{Name: "c", Ext: ".c"}, separateMacros)
-		switch {
-		case cppErr == nil && cErr == nil:
-			if cDoc.ParseErrors < cppDoc.ParseErrors {
-				return cDoc, nil
-			}
-			return cppDoc, nil // tie and C++ errors both prefer the documented default
-		case cppErr == nil:
-			return cppDoc, nil
-		case cErr == nil:
-			return cDoc, nil
-		default:
-			return nil, fmt.Errorf("C++ parse: %v; C parse: %v", cppErr, cErr)
-		}
-	}
-
-	return parseAndExtractLanguage(src, path, langCode, separateMacros)
-}
-
-func parseAndExtractLanguage(src, path string, langCode lang.Language, separateMacros bool) (*ir.SemanticDocument, error) {
-	// Create parser
-	p, err := parser.New(langCode)
-	if err != nil {
-		return nil, err
-	}
-	defer p.Close()
-
-	// Parse
-	ast, err := p.Parse(context.Background(), []byte(src))
+	ast, err := analysis.Parse(context.Background(), []byte(src), path)
 	if err != nil {
 		return nil, err
 	}
 	defer ast.Close()
-
-	// Extract
-	ex := extract.NewWithOptions(path, extract.Options{SeparateMacroFunctions: separateMacros})
-	doc, err := ex.Extract(ast)
-	if err != nil {
-		return nil, err
-	}
-
-	return doc, nil
+	return extract.NewWithOptions(path, extract.Options{SeparateMacroFunctions: separateMacros}).Extract(ast)
 }
 
 func loadFile(path string, stdin io.Reader) (string, error) {
@@ -309,6 +299,11 @@ func printUsage(w io.Writer) {
 Usage:
   cmscout [flags] <old_file> <new_file>
   cmscout --simple-diff [flags] <old_file> <new_file>
+  cmscout --metrics [flags] <file>
+  cmscout --metrics [flags] <before_file> <after_file>
+  cmscout --metrics --scan [flags] [path ...]
+  cmscout --metrics --staged|--worktree [flags]
+  cmscout --metrics --revision <commit> [--parent <number>|--base <commit>] [flags]
 
   The default mode parses both files and reports the change per semantic
   block (functions, classes, methods, constants, imports, JSX elements,
@@ -319,6 +314,20 @@ Usage:
   (only one side may be stdin).
 
 Flags:
+  --metrics              Measure one file, or compare metrics and diff two files
+  --format text|json     Metrics output format (default: text)
+  --explain              Include each complexity decision and its location
+  --root <dir>           Root for qualified names (default: infer from source path)
+  --name <file>          Logical name for a single metrics input
+  --stdin-name <file>    Logical filename for metrics read from '-'
+  --scan                Scan files and directories (default: current directory)
+  --staged              Compare HEAD with the index
+  --worktree            Compare the index with tracked working files
+  --revision <commit>   Compare a commit with its parent
+  --parent <number>     Choose a parent of --revision (required for merges)
+  --base <commit>       Compare --revision against this commit instead
+  --include <glob>      Include root-relative scan paths, repeatable; ** spans dirs
+  --exclude <glob>      Exclude root-relative scan paths, repeatable
   --simple-diff           Skip semantic analysis: plain whole-file line diff
   --no-color              Disable ANSI colors
   --summary               Show only summary statistics
