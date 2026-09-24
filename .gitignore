@@ -11,7 +11,7 @@
 *.test
 *~
 .env
-/cmdiff
+/cmscout
 /tmp/
 BACKLOG.md
 coverage.*
@@ -24,4 +24,4 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
-/cmdiff
+/cmscout

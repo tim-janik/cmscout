@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"cmdiff/pkg/lang"
+	"cmscout/pkg/lang"
 )
 
 func parseSrc(t *testing.T, name, src string) *AST {

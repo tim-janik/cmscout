@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"cmdiff/pkg/diff"
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/diff"
+	"cmscout/pkg/ir"
 )
 
 func TestTextReport_AddedRemoved(t *testing.T) {
@@ -438,6 +438,12 @@ func TestTextReport_SimilarityBelow100WhenChanged(t *testing.T) {
 	wantChanged := fmt.Sprintf("@@ -1,1 +1,1 @@  VERSION  %.0f%% similarity", similarityFor(&pairs[0]))
 	if !strings.Contains(output, wantChanged) {
 		t.Errorf("changed pair should display the distance similarity of its final text (%s), got:\n%s", wantChanged, output)
+	}
+	if !strings.Contains(output, "VERSION  "+fmt.Sprintf("%.0f%%", similarityFor(&pairs[0]))+" similarity  [changed]") {
+		t.Errorf("changed pair must render a [changed] tag matching the summary's Changed counter:\n%s", output)
+	}
+	if strings.Contains(output, "foo  100% similarity  [changed]") {
+		t.Errorf("unchanged pair must not render [changed]:\n%s", output)
 	}
 	if strings.Contains(output, "@@ -1,1 +1,1 @@  VERSION  100% similarity") {
 		t.Errorf("changed pair must not display 100%% similarity even if stored Confidence is 1.0\n%s", output)

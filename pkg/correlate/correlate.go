@@ -3,8 +3,8 @@
 package correlate
 
 import (
-	"cmdiff/pkg/ir"
-	"cmdiff/pkg/matching"
+	"cmscout/pkg/ir"
+	"cmscout/pkg/matching"
 )
 
 // Correlate matches two documents; every block appears exactly once (matched, added, or removed).

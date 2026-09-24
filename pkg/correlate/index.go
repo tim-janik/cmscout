@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/ir"
 )
 
 // numberAnonymousBlocks: per-side ordinal names (arrow_function.01, ...) in source order,

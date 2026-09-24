@@ -21,19 +21,19 @@ vet: ## Run go vet
 
 # == build ==
 # CGO is required because tree-sitter grammars are C libraries.
-build: ## Build the cmdiff binary
-	CGO_ENABLED=1 go build -trimpath -o cmdiff ./cmd/cmdiff
+build: ## Build the cmscout binary
+	CGO_ENABLED=1 go build -trimpath -o cmscout ./cmd/cmscout
 .PHONY: build
 
 # == run ==
 run: build ## Build and run on testdata fixtures
-	./cmdiff --no-color testdata/old/knob.tsx testdata/new/knob.tsx
+	./cmscout --no-color testdata/old/knob.tsx testdata/new/knob.tsx
 .PHONY: run
 
 # == clean ==
 clean: ## Remove cached build artifacts and binary
 	go clean ./...
-	rm -f cmdiff
+	rm -f cmscout
 .PHONY: clean
 
 # == meta ==

@@ -5,7 +5,7 @@ package report
 import (
 	"sort"
 
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/ir"
 )
 
 // computeMovedPairs: pairs outside the old-vs-new order LCS were genuinely reordered;

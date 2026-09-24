@@ -2,7 +2,7 @@
 
 package main
 
-// Invariant tests for the coverage guarantee of the `cmdiff` semantic
+// Invariant tests for the coverage guarantee of the `cmscout` semantic
 // report and its `--simple-diff` mode.
 //
 // Invariant 1 (coverage — the hard requirement): for ANY pair of input
@@ -32,8 +32,8 @@ import (
 	"strings"
 	"testing"
 
-	"cmdiff/pkg/lang"
-	"cmdiff/pkg/parser"
+	"cmscout/pkg/lang"
+	"cmscout/pkg/parser"
 )
 
 // ---------------------------------------------------------------------------
@@ -329,7 +329,7 @@ func writeFile(t *testing.T, dir, name, content string) string {
 	return p
 }
 
-// runTool invokes the cmdiff run() entry point and returns stdout.
+// runTool invokes the cmscout run() entry point and returns stdout.
 func runTool(t *testing.T, args ...string) string {
 	t.Helper()
 	var out, errBuf bytes.Buffer
@@ -368,7 +368,7 @@ func nonEmptyLines(src string) []string {
 }
 
 // splitSections splits a report into sections keyed by their header line
-// (kind headers, "Other", "Summary", the "diff --cmdiff" header).
+// (kind headers, "Other", "Summary", the "diff --cmscout" header).
 func splitSections(output string) []section {
 	var out []section
 	current := -1
@@ -398,7 +398,7 @@ type section struct {
 }
 
 // isSectionHeader reports whether a line starts a new report section (kind headers,
-// "Summary", "diff --cmdiff", "Other"); content lines always start with "+", "-", or " ".
+// "Summary", "diff --cmscout", "Other"); content lines always start with "+", "-", or " ".
 func isSectionHeader(line string) bool {
 	return contentLineOf(line) == nil
 }
@@ -1421,7 +1421,7 @@ func TestStdinPaths(t *testing.T) {
 		strings.NewReader(""), &out, &errBuf); err != nil {
 		t.Fatalf("-B/-A review failed: %v\n%s", err, errBuf.String())
 	}
-	if !strings.Contains(out.String(), "diff --cmdiff display-old.ts display-new.ts") {
+	if !strings.Contains(out.String(), "diff --cmscout display-old.ts display-new.ts") {
 		t.Errorf("-B/-A display names must appear in the header:\n%s", out.String())
 	}
 	if !strings.Contains(out.String(), "const a = 2;") {

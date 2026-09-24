@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/ir"
 )
 
 func TestMatchBlocks_ExactName(t *testing.T) {

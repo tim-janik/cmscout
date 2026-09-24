@@ -5,7 +5,7 @@ package correlate
 import (
 	"testing"
 
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/ir"
 )
 
 func newDoc(blocks ...ir.SemanticBlock) *ir.SemanticDocument {

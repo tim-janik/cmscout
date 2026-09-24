@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/ir"
 )
 
 // AttachPrefixComments merges doc-prefix comment runs (e.g. `/// Do foo` before `void foo()`) into their

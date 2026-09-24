@@ -10,7 +10,7 @@ import (
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/ir"
 )
 
 // isHtmlTaggedTemplate reports whether the template_string node is the

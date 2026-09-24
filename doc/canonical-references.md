@@ -2,7 +2,7 @@
 
 `CollapseMatchedSubBlocks` in `pkg/correlate/collapse.go` replaces a matched child's
 source with a canonical reference comment so a parent's diff stays small.
-`cmd/cmdiff/main.go` calls it on the correlation result before
+`cmd/cmscout/main.go` calls it on the correlation result before
 `AttachPrefixComments` and word-level Diff. This page describes how references
 are built, folded and absorbed.
 

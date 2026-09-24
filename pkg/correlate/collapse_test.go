@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"cmdiff/pkg/ir"
-	"cmdiff/pkg/matching"
+	"cmscout/pkg/ir"
+	"cmscout/pkg/matching"
 )
 
 func TestNumberAnonymousBlocks_PerSide(t *testing.T) {

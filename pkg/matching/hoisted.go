@@ -3,7 +3,7 @@
 package matching
 
 import (
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/ir"
 )
 
 // hoistedCallableKind: callables that do not capture their enclosing scope (functions hoist,

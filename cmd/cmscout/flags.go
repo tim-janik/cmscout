@@ -6,7 +6,7 @@ import (
 	"flag"
 	"fmt"
 
-	"cmdiff/pkg/diff"
+	"cmscout/pkg/diff"
 )
 
 // compareFlags holds display names, -B/-A content redirection, and output options.
@@ -56,7 +56,7 @@ func (cf *compareFlags) resolve(args []string) (oldContentPath, newContentPath s
 	}
 
 	if cf.oldName == "" || cf.newName == "" {
-		return "", "", fmt.Errorf("usage: cmdiff [flags] <old_file> <new_file>")
+		return "", "", fmt.Errorf("usage: cmscout [flags] <old_file> <new_file>")
 	}
 
 	oldContentPath = cf.beforeFile

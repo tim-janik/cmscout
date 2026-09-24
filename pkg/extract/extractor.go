@@ -9,8 +9,8 @@ import (
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 
-	"cmdiff/pkg/ir"
-	"cmdiff/pkg/parser"
+	"cmscout/pkg/ir"
+	"cmscout/pkg/parser"
 )
 
 // Lifecycle hook names across React, Lit, Solid, Vue, detected during extraction.

@@ -1,6 +1,6 @@
 // This Source Code Form is licensed MPL-2.0: http://mozilla.org/MPL/2.0
 
-// Command cmdiff is a Code Motion Diff: it matches code blocks across languages
+// Command cmscout is a Code Motion Scout: it matches code blocks across languages
 // (functions, classes, JSX, string templates) and diffs per block.
 package main
 
@@ -11,13 +11,13 @@ import (
 	"io"
 	"os"
 
-	"cmdiff/pkg/correlate"
-	"cmdiff/pkg/diff"
-	"cmdiff/pkg/extract"
-	"cmdiff/pkg/ir"
-	"cmdiff/pkg/lang"
-	"cmdiff/pkg/parser"
-	"cmdiff/pkg/report"
+	"cmscout/pkg/correlate"
+	"cmscout/pkg/diff"
+	"cmscout/pkg/extract"
+	"cmscout/pkg/ir"
+	"cmscout/pkg/lang"
+	"cmscout/pkg/parser"
+	"cmscout/pkg/report"
 )
 
 func main() {
@@ -39,7 +39,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		removedStyle  string
 	)
 
-	fs := flag.NewFlagSet("cmdiff", flag.ContinueOnError)
+	fs := flag.NewFlagSet("cmscout", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cf.register(fs)
 	fs.BoolVar(&summary, "summary", false, "show only summary statistics")
@@ -212,7 +212,7 @@ func writeReport(stdout io.Writer, opts report.Options, result *ir.CorrelationRe
 		opts.NewLanguage = newLang.Name
 	}
 	r := &report.TextReporter{Opts: opts}
-	if _, err := fmt.Fprintf(stdout, "diff --cmdiff %s %s\n", oldName, newName); err != nil {
+	if _, err := fmt.Fprintf(stdout, "diff --cmscout %s %s\n", oldName, newName); err != nil {
 		return err
 	}
 	return r.Write(stdout, result, "", "")
@@ -304,11 +304,11 @@ func loadPair(oldPath, newPath string, stdin io.Reader) (string, string, error) 
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprint(w, `cmdiff — code motion diff
+	fmt.Fprint(w, `cmscout — code motion scout
 
 Usage:
-  cmdiff [flags] <old_file> <new_file>
-  cmdiff --simple-diff [flags] <old_file> <new_file>
+  cmscout [flags] <old_file> <new_file>
+  cmscout --simple-diff [flags] <old_file> <new_file>
 
   The default mode parses both files and reports the change per semantic
   block (functions, classes, methods, constants, imports, JSX elements,

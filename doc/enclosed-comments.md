@@ -18,6 +18,6 @@ standalone Comments section; keeping them would show the text twice.
 - One-sided comments are enclosed when their own side sits inside a container
   present in the result.
 
-The pass runs in cmd/cmdiff/main.go after CollapseMatchedSubBlocks and
+The pass runs in cmd/cmscout/main.go after CollapseMatchedSubBlocks and
 AttachPrefixComments, before the word diff (stage overview:
 [doc/pipeline.md](pipeline.md)).

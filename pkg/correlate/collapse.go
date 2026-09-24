@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"sort"
 
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/ir"
 )
 
 // kindName identifies a block by kind and name.

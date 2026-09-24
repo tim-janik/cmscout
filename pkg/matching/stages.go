@@ -6,7 +6,7 @@ package matching
 import (
 	"strings"
 
-	"cmdiff/pkg/ir"
+	"cmscout/pkg/ir"
 )
 
 // isRootLevel treats namespace members as top-level matching candidates.
