@@ -231,7 +231,7 @@ func isTagStartByte(b byte) bool {
 
 // isVoidElement reports whether the HTML tag never has a closing tag (self-closing).
 func isVoidElement(name string) bool {
-	switch name {
+	switch strings.ToLower(name) {
 	case "area", "base", "br", "col", "embed", "hr", "img", "input",
 		"link", "meta", "param", "source", "track", "wbr":
 		return true
