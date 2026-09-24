@@ -1,0 +1,27 @@
+# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
+
+*.coverprofile
+*.coverprofile
+*.dll
+*.dylib
+*.lo
+*.o
+*.out
+*.so
+*.test
+*~
+.env
+/cmdiff
+/tmp/
+BACKLOG.md
+coverage.*
+go.work
+go.work.sum
+
+# env file
+.env
+
+# Editor/IDE
+# .idea/
+# .vscode/
+/cmdiff
