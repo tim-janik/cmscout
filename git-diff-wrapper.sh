@@ -6,6 +6,12 @@ set -euo pipefail
 # Git external diff wrapper: maps git's protocol args ($1 path, $2/$5 content files,
 # $8 rename name) to `cmscout -B $2 -A $5 a/$1 b/${8-$1}`; -B/-A carry the contents.
 
+# Unmerged paths arrive as a single path argument (merge conflicts).
+if [ "$#" -eq 1 ]; then
+  echo "* Unmerged path $1"
+  exit 0
+fi
+
 if [ "$#" -lt 7 ]; then
   echo "git-diff-wrapper.sh: expected Git external diff arguments" >&2
   exit 2
