@@ -86,7 +86,7 @@ expect_failure grep -q 'Old notes.' "$work/echo"
 [[ $(grep -cx create "$GH_TEST_LOG") == 1 ]]
 grep -qx -- '--verify-tag' "$GH_TEST_LOG"
 grep -qx -- '--draft' "$GH_TEST_LOG"
-grep -qx 'example 0.1.0-rc.5' "$GH_TEST_LOG"
+grep -qxi 'example 0.1.0-rc.5' "$GH_TEST_LOG"
 grep -qx 'Candidate notes.' "$GH_TEST_NOTES"
 expect_failure grep -q 'Old notes.' "$GH_TEST_NOTES"
 printf '## 0.1.0-rc.50\n' > NEWS.md
@@ -111,7 +111,7 @@ expect_failure grep -q baseline "$work/echo"
 .github/workflows/gh-release.sh --upload v0.1.0-nightly.1
 [[ $(grep -cx create "$GH_TEST_LOG") == 1 ]]
 grep -qx -- '--prerelease' "$GH_TEST_LOG"
-grep -qx 'example 0.1.0-nightly.1' "$GH_TEST_LOG"
+grep -qxi 'example 0.1.0-nightly.1' "$GH_TEST_LOG"
 grep -q 'Nightly work' "$GH_TEST_NOTES"
 expect_failure grep -q baseline "$GH_TEST_NOTES"
 

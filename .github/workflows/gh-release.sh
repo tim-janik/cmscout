@@ -40,12 +40,17 @@ VERSION=${TAG#v}
 PROJECT=$(git config --local --get remote.origin.url || :)
 PROJECT=${PROJECT%/}; PROJECT=${PROJECT##*/}; PROJECT=${PROJECT##*:}; PROJECT=${PROJECT%.git}
 PROJECT=${PROJECT:-${PWD##*/}}
-TITLE="${PROJECT^} $VERSION"
+TITLE="${PROJECT^^} $VERSION"
+
+extract_version()
+(
+  sed -nr '/^##? /s/^#+( [a-zA-Z_0-9-]+)? v?([0-9]\.[0-9][^ ]*)( .*)?$/\2/p' "$1" | head -1
+)
 
 # PRERELEASE for lightweight tags, DRAFT for annotated.
 KIND=--prerelease
 [[ $(git cat-file -t "refs/tags/$TAG") != tag ]] || KIND=--draft
-[[ $KIND != --draft || $(awk '/^##? /{h=$2; sub(/^v/, "", h); if (h !~ /^[0-9]/ && NF > 2) { h=$3; sub(/^v/, "", h) }; print h; exit}' NEWS.md) == "$VERSION" ]] || die 'NEWS mismatch'
+[[ $KIND != --draft || $(extract_version NEWS.md) == "$VERSION" ]] || die 'NEWS mismatch'
 
 # Build release assets, in docker if requested.
 if [[ $DOCKER ]]; then
@@ -73,17 +78,15 @@ fi
   die "missing artifacts/$PROJECT-$VERSION-SHA256SUMS; make distcheck must build $VERSION artifacts"
 ( cd artifacts && sha256sum -c "$PROJECT-$VERSION-SHA256SUMS" )
 
-# NEWS, extract the first version entry for annotated tags; '# v1.1' and
-# '## 0.1.2 - 2000-01-02' style headings are fine. Dotfile stays out of artifacts/*.
+# NEWS, extract the first version entry for annotated tags, extract_version()
+# accepts '##? v1.2 .*' style headings. Dotfiles in artifacts/* are ignored.
 if [[ $KIND == --draft ]]; then
   [[ -f NEWS.md ]] || die 'Annotated release tags require NEWS.md'
-  awk -v version="$VERSION" '
+  awk -v V="$VERSION" '
     /^##? / {
       if (found) exit
-      heading = $2; sub(/^v/, "", heading)
-      if (heading !~ /^[0-9]/ && NF > 2) { heading = $3; sub(/^v/, "", heading) }
-      if (heading !~ /^[0-9]/) next
-      if (heading != version) exit 1
+      for (i = 1; i <= NF; i++) { s = $i; sub(/^v/, "", s); if (s == V) break }
+      if (i > NF) next
       found = 1
     }
     found { print }
