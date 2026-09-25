@@ -10,7 +10,6 @@ unset DOCKER_IMAGE DOCKER_ENV DOCKER_PLATFORM
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 mkdir -p "$work/repo/.github/workflows" "$work/bin"
 cp "$scripts/gh-release.sh" "$work/repo/.github/workflows/"
-cp "$scripts/../../Makefile" "$work/repo/"
 cd "$work/repo"
 git init -q --initial-branch=trunk
 git config user.name 'Release Test'
@@ -37,7 +36,7 @@ EOF
 cat > "$work/bin/make" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
-[[ ${1-} == dist || ${1-} == distcheck ]] || exec /usr/bin/make "$@"
+[[ ${1-} == distcheck ]]
 if [[ ${FAKE_MAKE_STATUS:-0} != 0 ]]; then
   echo 'make: simulated failure' >&2
   exit "$FAKE_MAKE_STATUS"
@@ -73,7 +72,6 @@ expect_failure()
 
 # Annotated tag on its own commit: draft release with NEWS.md notes.
 git checkout -q v0.1.0-rc.5
-: > "$GH_TEST_LOG"
 .github/workflows/gh-release.sh v0.1.0-rc.5 > "$work/echo"
 grep -q 'gh release create' "$work/echo"
 grep -q -- '--verify-tag' "$work/echo"
@@ -81,7 +79,6 @@ grep -qE '(^| )--draft( |$)' "$work/echo"
 grep -q 'Candidate notes.' "$work/echo"
 expect_failure grep -q 'Old notes.' "$work/echo"
 [[ ! -s $GH_TEST_LOG ]]
-: > "$GH_TEST_LOG"
 .github/workflows/gh-release.sh --upload v0.1.0-rc.5
 [[ $(grep -cx create "$GH_TEST_LOG") == 1 ]]
 grep -qx -- '--verify-tag' "$GH_TEST_LOG"
@@ -107,7 +104,6 @@ grep -q 'Nightly work' "$work/echo"
 expect_failure grep -q 'Add release notes' "$work/echo"
 expect_failure grep -q baseline "$work/echo"
 [[ ! -s $GH_TEST_LOG ]]
-: > "$GH_TEST_LOG"
 .github/workflows/gh-release.sh --upload v0.1.0-nightly.1
 [[ $(grep -cx create "$GH_TEST_LOG") == 1 ]]
 grep -qx -- '--prerelease' "$GH_TEST_LOG"
@@ -117,7 +113,6 @@ expect_failure grep -q baseline "$GH_TEST_NOTES"
 
 # Docker mode: each DOCKER_ENV item gets its own --env, image precedes the command.
 : > "$GH_TEST_LOG"
-: > "$DOCKER_TEST_LOG"
 export DOCKER_IMAGE='example-ci:latest' DOCKER_ENV='GOPATH=/tmp/go GOCACHE=/tmp/go-build'
 .github/workflows/gh-release.sh --docker --upload v0.1.0-nightly.1
 [[ $(grep -B1 -x 'GOPATH=/tmp/go' "$DOCKER_TEST_LOG" | head -n1) == --env ]]
