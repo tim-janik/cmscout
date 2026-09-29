@@ -89,6 +89,8 @@ When a release is published, download its binary archive from
 [GitHub Releases](https://github.com/tim-janik/cmscout/releases), unpack it, and
 put `cmscout` on your PATH. The Git wrapper can stay beside the binary.
 
+See [Releasing](doc/releases.md) for archive builds, tags, and nightly checks.
+
 To build from source, Go 1.25+ and a C compiler are required.
 Tree-sitter grammars are C libraries, so builds need `CGO_ENABLED=1`, which the Makefile sets.
 

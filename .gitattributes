@@ -1,1 +1,2 @@
 .version export-subst
+/.git* export-ignore

@@ -3,8 +3,7 @@
 SHELL := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
 
-# Release version and commit date: git describe, else the .version file baked
-# into source archives by git export-subst; man pages take -M date="$(version_date)".
+# git describe, else the .version file baked into source archives by export-subst.
 TAG != git log -1 --pretty='%(describe:tags,match=v[0-9]*.[0-9]*)' HEAD 2>/dev/null || sed -n 's/ .*//p' .version 2>/dev/null
 version_date != git log -1 --format=%ci 2>/dev/null || sed -n 's/^[^ ]* //p' .version 2>/dev/null
 version = $(patsubst v%,%,$(TAG))
@@ -41,36 +40,38 @@ version: ## Print the release version
 	@echo "$(version)  $(version_date)"
 .PHONY: version
 
-dist: build ## Build source and binary release archives
+dist: ## Build the source release archive
 	git diff --quiet HEAD -- || echo 'WARNING: working tree is dirty' >&2
 	rm -rf artifacts && mkdir artifacts
 	git archive --prefix=$(distname)/ HEAD | xz -T1 -9 > artifacts/$(distname).tar.xz
+	ls -lh artifacts/*
+.PHONY: dist
+
+package: build ## Build the binary release archive
+	rm -rf artifacts/$(package) && mkdir -p artifacts/$(package)
+	cp -a cmscout git-diff-wrapper.sh README.md doc artifacts/$(package)/
 	{ cat LICENSE "$$(go env GOROOT)/LICENSE"; \
 	  go list -deps -f '{{if .Module}}{{if not .Module.Main}}{{.Module.Dir}}{{end}}{{end}}' ./cmd/cmscout | \
 	    sort -u | while IFS= read -r dir; do \
 	      test -z "$$dir" || find "$$dir" -type f -name LICENSE -exec cat {} +; \
-	    done; } > artifacts/LICENSE
-	git archive --prefix=$(package)/ --add-file=cmscout --add-file=artifacts/LICENSE \
-	  HEAD git-diff-wrapper.sh README.md doc | \
-	  xz -T1 -9 > artifacts/$(package).tar.xz
-	cd artifacts && sha256sum $(distname).tar.xz $(package).tar.xz > $(distname)-SHA256SUMS
-	ls -lh artifacts/*
-.PHONY: dist
-$(distname)-SHA256SUMS: dist
+	    done; } > artifacts/$(package)/LICENSE
+	tar -C artifacts -cf - $(package) | xz -T1 -9 > artifacts/$(package).tar.xz
+	rm -rf artifacts/$(package)
+.PHONY: package
 
-distcheck: $(distname)-SHA256SUMS ## Check binary and source archive
-	cd artifacts && sha256sum -c $(distname)-SHA256SUMS
+distcheck: dist ## Build and check release archives from the source tarball
 	work=$$(mktemp -d) && trap 'rm -rf $$work' EXIT && \
-	  test "$$(xz -dc artifacts/$(package).tar.xz | git get-tar-commit-id || :)" = "$$(git rev-parse HEAD)" && \
-	  mkdir $$work/pkg && xz -dc artifacts/$(package).tar.xz | tar -x -C $$work/pkg && \
-	  xz -dc artifacts/$(distname).tar.xz > $$work/source.tar && tar -xf $$work/source.tar -C $$work && \
-	  test "$$(git get-tar-commit-id < $$work/source.tar)" = "$$(git rev-parse HEAD)" && \
-	  cd / && test "$$($$work/pkg/$(package)/cmscout --version)" = "cmscout $(version)" && \
-	  $(MAKE) -C $$work/$(distname) build test vet && shellcheck $$work/$(distname)/.github/workflows/*.sh && \
-	  cmp $$work/pkg/$(package)/cmscout $$work/$(distname)/cmscout && \
-	  test "$$($$work/$(distname)/cmscout --version)" = "cmscout $(version)" && \
-	  $$work/$(distname)/cmscout --no-color $$work/$(distname)/testdata/old/knob.tsx $$work/$(distname)/testdata/new/knob.tsx | \
+	  tar -xJf artifacts/$(distname).tar.xz -C $$work && \
+	  $(MAKE) -C $$work/$(distname) package test vet && \
+	  cp $$work/$(distname)/artifacts/$(package).tar.xz artifacts/ && \
+	  tar -xJf artifacts/$(package).tar.xz -C $$work && \
+	  cd $$work/$(distname) && \
+	  test "$$($$work/$(package)/cmscout --version)" = "cmscout $(version)" && \
+	  $$work/$(package)/cmscout --no-color testdata/old/knob.tsx testdata/new/knob.tsx | \
 	  grep -qE 'Matched:.*[1-9]'
+	cd artifacts && sha256sum $(distname).tar.xz $(package).tar.xz > $(distname).SHA256SUMS && \
+	  sha256sum -c $(distname).SHA256SUMS
+	ls -lh artifacts/*
 .PHONY: distcheck
 
 # == run ==
