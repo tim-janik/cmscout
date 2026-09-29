@@ -9,7 +9,7 @@ Both archives and `cmscout-VERSION.SHA256SUMS` end up in `artifacts/`.
 
 Local builds need Go 1.25+, a C compiler, Git, Make, and xz.
 The release workflow uses the Go image and environment in
-[ci.yml](../.github/workflows/ci.yml).
+[ci.yml](https://github.com/tim-janik/cmscout/blob/trunk/.github/workflows/ci.yml).
 
 ## Version and tags
 
@@ -44,7 +44,7 @@ Omit `--docker` to use local build tools.
 
 ## Nightly checks
 
-[nightly.yml](../.github/workflows/nightly.yml) runs `make distcheck` daily when
+[nightly.yml](https://github.com/tim-janik/cmscout/blob/trunk/.github/workflows/nightly.yml) runs `make distcheck` daily when
 the latest commit is less than 25 hours old. A manual run always builds.
 It uses the release Go image, keeps artifacts for seven days, and reports the result
 on IRC. It does not create tags or GitHub releases.
