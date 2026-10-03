@@ -48,6 +48,8 @@ ordinary snapshots, and explicit `skipped` and `diagnostics` arrays. A complete
 report covers the selected regular source files, not an application's full
 membership. Read errors, binary source, or incomplete file analysis produce a
 partial report and exit 2. An empty selection is a complete report with no files.
+Scans read and analyze one selected file at a time. They retain the metric
+records for the report, and release source bytes and tokens after each file.
 
 ## Measurements
 

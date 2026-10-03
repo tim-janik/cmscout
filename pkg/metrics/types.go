@@ -92,6 +92,11 @@ type Snapshot struct {
 	tokens        []source_token
 }
 
+// DiscardComparisonData releases source and tokens while preserving the report.
+func (snapshot *Snapshot) DiscardComparisonData() {
+	snapshot.source, snapshot.tokens = nil, nil
+}
+
 type Options struct {
 	Namespace string
 	Path      string

@@ -5,6 +5,8 @@ package main
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 
 	"cmscout/pkg/analysis"
 	"cmscout/pkg/metrics"
@@ -21,17 +23,26 @@ func (mf metrics_flags) scan_files(paths []string, stdout io.Writer) error {
 		SchemaVersion: "1", Kind: "scan", Status: "complete", Root: files.Root, Population: "selected_files",
 		Files: []*metrics.Snapshot{}, Skipped: files.Skipped, Diagnostics: files.Diagnostics,
 	}
-	for _, file := range files.Files {
-		options, err := metric_context(file.Path, files.Root, true)
+	for _, name := range files.Files {
+		options, err := metric_context(name, files.Root, true)
 		if err != nil {
 			return err
 		}
 		options.Explain = mf.explain
-		snapshot, err := measure_source(file.Content, options)
+		content, err := os.ReadFile(filepath.Join(files.Root, filepath.FromSlash(name)))
+		if err == nil {
+			err = source.CheckText(content)
+		}
 		if err != nil {
-			result.Diagnostics = append(result.Diagnostics, source.Notice{Path: file.Path, Kind: "analysis_error", Message: err.Error()})
+			result.Diagnostics = append(result.Diagnostics, source.Notice{Path: name, Kind: "read_error", Message: err.Error()})
 			continue
 		}
+		snapshot, err := measure_source(content, options)
+		if err != nil {
+			result.Diagnostics = append(result.Diagnostics, source.Notice{Path: name, Kind: "analysis_error", Message: err.Error()})
+			continue
+		}
+		snapshot.DiscardComparisonData()
 		result.Files = append(result.Files, snapshot)
 		if snapshot.Status != "complete" {
 			result.Status = "partial"

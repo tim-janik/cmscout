@@ -199,6 +199,14 @@ func TestMeasure_determinism_and_lifetime(t *testing.T) {
 	if first.Components[0].Size.Bytes != uint(len(source)) || first.Components[0].Span.StartByte != 0 {
 		t.Fatalf("file excludes surrounding whitespace: %+v", first.Components[0])
 	}
+	first.DiscardComparisonData()
+	discarded, _ := json.Marshal(first)
+	if string(discarded) != string(a) {
+		t.Fatal("discarding comparison data changed the report")
+	}
+	if _, err := Compare(first, second); err == nil {
+		t.Fatal("compared a snapshot without source data")
+	}
 	if _, err := Measure(ast, options); err == nil {
 		t.Fatal("closed tree accepted")
 	}
