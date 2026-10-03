@@ -18,6 +18,7 @@ type component_pair struct {
 }
 
 const max_comparison_cells = 16_000_000
+const max_comparison_components = 512
 
 func Compare(before, after *Snapshot) (*Comparison, error) {
 	return compare_snapshots(before, after, false)
@@ -49,10 +50,17 @@ func compare_snapshots(before, after *Snapshot, file_identity bool) (*Comparison
 	}
 	old_lines := bytes.Count(before.source, []byte{'\n'}) + 2
 	new_lines := bytes.Count(after.source, []byte{'\n'}) + 2
+	limit_message := ""
 	if !bytes.Equal(before.source, after.source) && old_lines > max_comparison_cells/new_lines {
+		limit_message = "line comparison exceeds 16 million cells; snapshots remain available"
+	}
+	if len(before.Components)+len(after.Components) > max_comparison_components {
+		limit_message = "component matching exceeds 512 total records; snapshots remain available"
+	}
+	if limit_message != "" {
 		result.Status, result.RangePrecision = "partial", "unavailable"
 		result.Diagnostics = append(result.Diagnostics, Diagnostic{
-			"comparison_limit", "line comparison exceeds 16 million cells; snapshots remain available", nil,
+			"comparison_limit", limit_message, nil,
 		})
 		return result, nil
 	}

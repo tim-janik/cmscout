@@ -61,6 +61,18 @@ func TestCompare_unchanged_and_snapshot_integrity(t *testing.T) {
 	}
 }
 
+func TestCompare_minified_component_limit(t *testing.T) {
+	source := strings.Repeat("call(() => 1);", 300)
+	for _, after := range []string{source, strings.Replace(source, "1", "2", 1)} {
+		result := compare_sources(t, "a.js", source, after)
+		if result.Status != "partial" || result.Before.Status != "complete" || result.After.Status != "complete" ||
+			result.RangePrecision != "unavailable" || len(result.Changes) != 0 || len(result.Diagnostics) != 1 ||
+			result.Diagnostics[0].Kind != "comparison_limit" || !strings.Contains(result.Diagnostics[0].Message, "component matching") {
+			t.Fatalf("minified callables bypassed comparison limit: %+v", result)
+		}
+	}
+}
+
 func TestCompare_nested_changes_and_deltas(t *testing.T) {
 	result := compare_sources(t, "a.js", "function outer(x) { const inner = () => x; }",
 		"function outer(x) { const inner = () => x ? 1 : 0; }")
