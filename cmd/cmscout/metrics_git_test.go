@@ -241,6 +241,23 @@ func TestMetrics_git_partial_and_invalid_modes(t *testing.T) {
 	}
 }
 
+func TestMetrics_parent_errors(t *testing.T) {
+	for _, test := range []struct {
+		arguments []string
+		message   string
+	}{
+		{[]string{"--revision=HEAD", "--parent=0"}, "--parent must be at least 1"},
+		{[]string{"--revision=HEAD", "--parent=-1"}, "--parent must be at least 1"},
+		{[]string{"--revision=HEAD", "--parent=1", "--base=HEAD"}, "--parent cannot be combined with --base"},
+	} {
+		args := append([]string{"--metrics"}, test.arguments...)
+		_, output, err := change_set_output(t, args...)
+		if exit_code(err) != 2 || len(output) != 0 || !strings.Contains(err.Error(), test.message) {
+			t.Fatalf("arguments=%v error=%v output=%s", args, err, output)
+		}
+	}
+}
+
 func TestMetrics_unmerged_index_and_source_symlink(t *testing.T) {
 	root := git_repository(t)
 	writeFile(t, root, "a.js", "function f() { return 0; }\n")

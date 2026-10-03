@@ -150,6 +150,14 @@ func TestMetrics_write_failure(t *testing.T) {
 	}
 }
 
+func TestMalformed_diff_flag_keeps_stdout_empty(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	err := run([]string{"--unknown"}, nil, &stdout, &stderr)
+	if exit_code(err) != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "Usage:") {
+		t.Fatalf("error=%v stdout=%q stderr=%q", err, stdout.String(), stderr.String())
+	}
+}
+
 func TestMetric_context_discovery(t *testing.T) {
 	directory := t.TempDir()
 	for _, marker := range []string{"go.mod", "go.work", "compile_commands.json", ".git"} {

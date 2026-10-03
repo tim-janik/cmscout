@@ -62,7 +62,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		if mf.enabled || metrics_mode {
 			return metrics_error{err}
 		}
-		printUsage(stdout)
+		printUsage(stderr)
 		return err
 	}
 	if mf.enabled {

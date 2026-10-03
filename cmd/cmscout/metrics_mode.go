@@ -36,17 +36,23 @@ func (mf metrics_flags) input_mode(paths []string, cf compareFlags) (string, err
 }
 
 func (mf metrics_flags) validate_flags(fs *flag.FlagSet, mode string) error {
-	var invalid string
+	var invalid error
 	fs.Visit(func(option *flag.Flag) {
-		if invalid == "" && !metric_flag_allowed(option.Name, mode) {
-			invalid = option.Name
+		if invalid != nil {
+			return
 		}
-		if option.Name == "parent" && (mf.parent < 1 || mf.base != "") {
-			invalid = option.Name
+		if !metric_flag_allowed(option.Name, mode) {
+			invalid = fmt.Errorf("--%s cannot be used with this metrics input mode", option.Name)
+		} else if option.Name == "parent" {
+			if mf.parent < 1 {
+				invalid = fmt.Errorf("--parent must be at least 1")
+			} else if mf.base != "" {
+				invalid = fmt.Errorf("--parent cannot be combined with --base")
+			}
 		}
 	})
-	if invalid != "" {
-		return fmt.Errorf("--%s cannot be used with this metrics input mode", invalid)
+	if invalid != nil {
+		return invalid
 	}
 	if mf.format != "text" && mf.format != "json" {
 		return fmt.Errorf("unknown metrics format %q: expected text or json", mf.format)
