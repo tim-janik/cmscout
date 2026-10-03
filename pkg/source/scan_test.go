@@ -43,6 +43,17 @@ func TestFilter(t *testing.T) {
 	}
 }
 
+func TestScan_discovers_paths_without_content_validation(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "binary.cc"), []byte{0}, 0644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := Scan([]string{root}, root, Filter{})
+	if err != nil || len(result.Files) != 1 || result.Files[0] != "binary.cc" || len(result.Diagnostics) != 0 {
+		t.Fatalf("scan should select paths without reading content: %+v %v", result, err)
+	}
+}
+
 func TestScan_unreadable_directory_and_exclusions(t *testing.T) {
 	root := t.TempDir()
 	blocked := filepath.Join(root, "blocked")
