@@ -235,12 +235,14 @@ evidence, flags, source ranges, and `delta`. Look up each name in its side's
 `components` array; the snapshot ID supplies the other part of its identity.
 The diff text is for display. Rules should read the structured fields.
 
-Changed files whose estimated line-comparison table exceeds 16 million cells produce
-a partial comparison with `comparison_limit` in `diagnostics` and exit 2. Both
+Changed files whose estimated line-comparison table exceeds 16 million cells, or
+file pairs with more than 512 component records in total, produce a partial
+comparison with `comparison_limit` in `diagnostics` and exit 2. Both
 snapshots remain available, but `changes` and source ranges are empty,
 `range_precision` is `"unavailable"`, and `diff` is omitted. This also applies to
 Git comparisons. It avoids large quadratic allocations without changing the
-existing diff command. Identical files and single-file metrics have no such limit.
+existing diff command. Identical files bypass the line limit. Single-file
+metrics have no comparison limit.
 
 The current inventory names files, callables, and their namespace, class,
 object, and Go type containers. Edits to other source are retained in the file
