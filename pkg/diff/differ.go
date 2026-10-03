@@ -17,7 +17,6 @@ const DefaultWordDiffSpanThreshold = 0.4
 type Options struct {
 	WordDiff    bool // split into words and diff at word granularity
 	IgnoreSpace bool // ignore all whitespace when comparing lines/words
-	FullContext bool // include unchanged lines outside change hunks
 	// Fraction of changed words above which the word diff renders as one span.
 	// 0 uses DefaultWordDiffSpanThreshold; a negative value disables the collapse.
 	WordDiffSpanThreshold float64
@@ -99,7 +98,7 @@ func (d *Differ) Diff(oldSource, newSource string) *ir.DiffResult {
 	oldLines := splitLines(oldSource)
 	newLines := splitLines(newSource)
 
-	hunks := computeHunksWithContext(oldLines, newLines, d.opts.FullContext, d.opts.IgnoreSpace)
+	hunks := computeHunks(oldLines, newLines, d.opts.IgnoreSpace)
 
 	// Word diff runs on the original lines (even under ignore-all-space) so highlights match the file.
 	if d.opts.WordDiff {
@@ -111,13 +110,6 @@ func (d *Differ) Diff(oldSource, newSource string) *ir.DiffResult {
 	}
 
 	return &ir.DiffResult{Hunks: hunks}
-}
-
-// DiffFull: same diff with full context, for whole-file reports (coverage contract).
-func (d *Differ) DiffFull(oldSource, newSource string) *ir.DiffResult {
-	full := *d
-	full.opts.FullContext = true
-	return full.Diff(oldSource, newSource)
 }
 
 // applyWordDiff: word diffs on normalization-hidden context lines and on the added line of replacement pairs.
@@ -453,8 +445,8 @@ func splitLines(s string) []string {
 	return lines
 }
 
-// computeHunksWithContext: LCS hunks; emitted content is always the ORIGINAL line text (both raw forms under ignore-space).
-func computeHunksWithContext(oldLines, newLines []string, fullContext, ignoreSpace bool) []ir.DiffHunk {
+// computeHunks: LCS hunks; emitted content is always the ORIGINAL line text (both raw forms under ignore-space).
+func computeHunks(oldLines, newLines []string, ignoreSpace bool) []ir.DiffHunk {
 	cmpOld := normalizeLines(oldLines, ignoreSpace)
 	cmpNew := normalizeLines(newLines, ignoreSpace)
 	if equalLines(cmpOld, cmpNew) {
@@ -466,8 +458,7 @@ func computeHunksWithContext(oldLines, newLines []string, fullContext, ignoreSpa
 	}
 	// Full LCS always computed: no coarse fallback for large inputs.
 	lcs := computeLCS(cmpOld, cmpNew)
-	oldDiff, newDiff := backtrack(lcs, cmpOld, cmpNew, oldLines, newLines)
-	return groupHunksWithContext(oldDiff, newDiff, fullContext)
+	return groupHunks(backtrack(lcs, cmpOld, cmpNew, oldLines, newLines))
 }
 
 // whitespaceOnlyHunk: all-context hunk carrying both raw forms (NewBlank marks a line that became blank).
@@ -532,28 +523,34 @@ func computeLCS(a, b []string) [][]int {
 	return dp
 }
 
-// backtrack: LCS walk emitting original text (dispA/dispB), appended in reverse.
-func backtrack(lcs [][]int, a, b, dispA, dispB []string) ([]diffOp, []diffOp) {
-	var oldDiff, newDiff []diffOp
+// backtrack: LCS walk emitting original text (dispA/dispB) as merged entries,
+// appended in reverse (removed-before-added at each change site).
+func backtrack(lcs [][]int, a, b, dispA, dispB []string) []diffOp {
+	var rev []diffOp
 	i := len(a)
 	j := len(b)
 	for i > 0 || j > 0 {
 		if i > 0 && j > 0 && a[i-1] == b[j-1] {
-			oldDiff = append(oldDiff, diffOp{Type: opContext, Content: dispA[i-1], OldNo: i, NewNo: j})
-			newDiff = append(newDiff, diffOp{Type: opContext, Content: dispB[j-1], OldNo: i, NewNo: j})
+			e := diffOp{Type: opContext, Content: dispA[i-1], OldNo: i, NewNo: j}
+			if dispA[i-1] != dispB[j-1] {
+				e.NewContent = dispB[j-1]
+				if e.NewContent == "" {
+					e.NewBlank = true
+				}
+			}
+			rev = append(rev, e)
 			i--
 			j--
 		} else if j > 0 && (i == 0 || lcs[i][j-1] >= lcs[i-1][j]) {
-			newDiff = append(newDiff, diffOp{Type: opAdd, Content: dispB[j-1], OldNo: 0, NewNo: j})
+			rev = append(rev, diffOp{Type: opAdd, Content: dispB[j-1], NewNo: j})
 			j--
 		} else {
-			oldDiff = append(oldDiff, diffOp{Type: opDel, Content: dispA[i-1], OldNo: i, NewNo: 0})
+			rev = append(rev, diffOp{Type: opDel, Content: dispA[i-1], OldNo: i})
 			i--
 		}
 	}
-	reverseOps(oldDiff)
-	reverseOps(newDiff)
-	return oldDiff, newDiff
+	reverseOps(rev)
+	return rev
 }
 
 // reverseOps reverses a diff operation slice in place.
@@ -572,127 +569,57 @@ const (
 )
 
 type diffOp struct {
-	Type    diffOpType
-	Content string
-	OldNo   int
-	NewNo   int
+	Type       diffOpType
+	Content    string
+	OldNo      int
+	NewNo      int
+	NewContent string // raw new text when it differs from content (ignore-space)
+	NewBlank   bool   // NewContent is empty because the new raw line is blank
 }
 
-// groupHunksWithContext: ≤3 context lines per change (or one full-span hunk with fullContext).
-func groupHunksWithContext(oldDiff, newDiff []diffOp, fullContext bool) []ir.DiffHunk {
-	type entry struct {
-		op         diffOpType
-		content    string
-		oldNo      int
-		newNo      int
-		newContent string // raw new text when it differs from content (ignore-space)
-		newBlank   bool   // newContent is empty because the new raw line is blank
+// groupHunks: one full-span hunk carrying every entry (whole-file report coverage).
+func groupHunks(entries []diffOp) []ir.DiffHunk {
+	if len(entries) == 0 {
+		return nil
 	}
-
-	var merged []entry
-	oi, ni := 0, 0
-	for oi < len(oldDiff) || ni < len(newDiff) {
-		switch {
-		case oi < len(oldDiff) && ni < len(newDiff) &&
-			oldDiff[oi].Type == opContext && newDiff[ni].Type == opContext:
-			e := entry{op: opContext, content: oldDiff[oi].Content, oldNo: oldDiff[oi].OldNo, newNo: newDiff[ni].NewNo}
-			if oldDiff[oi].Content != newDiff[ni].Content {
-				e.newContent = newDiff[ni].Content
-				if e.newContent == "" {
-					e.newBlank = true
-				}
-			}
-			merged = append(merged, e)
-			oi++
-			ni++
-		case oi < len(oldDiff) && oldDiff[oi].Type == opDel:
-			merged = append(merged, entry{op: opDel, content: oldDiff[oi].Content, oldNo: oldDiff[oi].OldNo})
-			oi++
-		case ni < len(newDiff) && newDiff[ni].Type == opAdd:
-			merged = append(merged, entry{op: opAdd, content: newDiff[ni].Content, newNo: newDiff[ni].NewNo})
-			ni++
+	hunk := ir.DiffHunk{}
+	for _, e := range entries {
+		lineType := ir.DiffLineContext
+		switch e.Type {
+		case opAdd:
+			lineType = ir.DiffLineAdded
+		case opDel:
+			lineType = ir.DiffLineRemoved
+		}
+		hunk.Lines = append(hunk.Lines, ir.DiffLine{
+			Content:    e.Content,
+			Type:       lineType,
+			OldNo:      e.OldNo,
+			NewNo:      e.NewNo,
+			NewContent: e.NewContent,
+			NewBlank:   e.NewBlank,
+		})
+		switch lineType {
+		case ir.DiffLineRemoved:
+			hunk.OldLines++
+		case ir.DiffLineAdded:
+			hunk.NewLines++
 		default:
-			// A malformed operation stream must not loop forever: preserve remaining ops as context.
-			if oi < len(oldDiff) {
-				merged = append(merged, entry{op: opContext, content: oldDiff[oi].Content, oldNo: oldDiff[oi].OldNo})
-				oi++
-			}
-			if ni < len(newDiff) {
-				merged = append(merged, entry{op: opContext, content: newDiff[ni].Content, newNo: newDiff[ni].NewNo})
-				ni++
-			}
+			hunk.OldLines++
+			hunk.NewLines++
 		}
 	}
-
-	const contextSize = 3
-	type span struct{ start, end int }
-	var spans []span
-	if fullContext {
-		if len(merged) > 0 {
-			spans = append(spans, span{start: 0, end: len(merged)})
-		}
-	} else {
-		for i, entry := range merged {
-			if entry.op == opContext {
-				continue
-			}
-			start := max(0, i-contextSize)
-			end := i + contextSize + 1
-			if end > len(merged) {
-				end = len(merged)
-			}
-			if len(spans) > 0 && start <= spans[len(spans)-1].end {
-				if end > spans[len(spans)-1].end {
-					spans[len(spans)-1].end = end
-				}
-				continue
-			}
-			spans = append(spans, span{start: start, end: end})
+	for _, line := range hunk.Lines {
+		if line.OldNo > 0 {
+			hunk.OldStart = line.OldNo
+			break
 		}
 	}
-
-	hunks := make([]ir.DiffHunk, 0, len(spans))
-	for _, s := range spans {
-		hunk := ir.DiffHunk{}
-		for _, entry := range merged[s.start:s.end] {
-			lineType := ir.DiffLineContext
-			switch entry.op {
-			case opAdd:
-				lineType = ir.DiffLineAdded
-			case opDel:
-				lineType = ir.DiffLineRemoved
-			}
-			hunk.Lines = append(hunk.Lines, ir.DiffLine{
-				Content:    entry.content,
-				Type:       lineType,
-				OldNo:      entry.oldNo,
-				NewNo:      entry.newNo,
-				NewContent: entry.newContent,
-				NewBlank:   entry.newBlank,
-			})
-			switch lineType {
-			case ir.DiffLineRemoved:
-				hunk.OldLines++
-			case ir.DiffLineAdded:
-				hunk.NewLines++
-			default:
-				hunk.OldLines++
-				hunk.NewLines++
-			}
+	for _, line := range hunk.Lines {
+		if line.NewNo > 0 {
+			hunk.NewStart = line.NewNo
+			break
 		}
-		for _, line := range hunk.Lines {
-			if line.OldNo > 0 {
-				hunk.OldStart = line.OldNo
-				break
-			}
-		}
-		for _, line := range hunk.Lines {
-			if line.NewNo > 0 {
-				hunk.NewStart = line.NewNo
-				break
-			}
-		}
-		hunks = append(hunks, hunk)
 	}
-	return hunks
+	return []ir.DiffHunk{hunk}
 }

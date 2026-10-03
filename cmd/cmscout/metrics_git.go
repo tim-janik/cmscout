@@ -85,7 +85,8 @@ func (mf metrics_flags) compare_git_file(cf compareFlags, root string, pair sour
 	}
 	var rendered bytes.Buffer
 	cf.oldName, cf.newName, cf.noColor = names[0], names[1], true
-	err = runSemanticReviewDocuments(cf, false, false, "white", "white", contents[0], contents[1], documents[0], documents[1], &rendered)
+	err = runSemanticReviewDocuments(cf, report.Options{NoColor: true, IgnoreSpace: cf.ignoreSpace},
+		contents[0], contents[1], documents[0], documents[1], &rendered)
 	if err != nil {
 		return nil, err
 	}

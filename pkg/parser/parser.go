@@ -4,9 +4,7 @@
 package parser
 
 import (
-	"context"
 	"fmt"
-	"sync"
 	"unsafe"
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
@@ -22,7 +20,6 @@ import (
 
 // Parser wraps a tree-sitter parser for a specific language.
 type Parser struct {
-	mu      sync.Mutex
 	ts      *tree_sitter.Parser
 	srcLang lang.Language // carried onto the AST; see Parse
 }
@@ -69,8 +66,6 @@ func (p *Parser) Close() {
 	if p == nil {
 		return
 	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
 	if p.ts != nil {
 		p.ts.Close()
 		p.ts = nil
@@ -78,62 +73,18 @@ func (p *Parser) Close() {
 }
 
 // Parse parses source code and returns an AST.
-func (p *Parser) Parse(ctx context.Context, source []byte) (*AST, error) {
+func (p *Parser) Parse(source []byte) (*AST, error) {
 	if p == nil {
 		return nil, fmt.Errorf("parser is nil")
 	}
-	if ctx == nil {
-		ctx = context.Background()
+	if p.ts == nil {
+		return nil, fmt.Errorf("parser is closed")
 	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
+	tree := p.ts.Parse(source, nil)
+	if tree == nil {
+		return nil, fmt.Errorf("failed to parse source: parser returned nil tree")
 	}
-
-	// Parse in a goroutine and close the tree if cancellation wins; otherwise native memory leaks.
-	sourceCopy := append([]byte(nil), source...)
-	type parseResult struct {
-		tree *tree_sitter.Tree
-		err  error
-	}
-	ch := make(chan parseResult)
-	go func() {
-		p.mu.Lock()
-		if p.ts == nil {
-			p.mu.Unlock()
-			select {
-			case ch <- parseResult{err: fmt.Errorf("parser is closed")}:
-			case <-ctx.Done():
-			}
-			return
-		}
-		tree := p.ts.Parse(sourceCopy, nil)
-		p.mu.Unlock()
-		select {
-		case ch <- parseResult{tree: tree}:
-		case <-ctx.Done():
-			if tree != nil {
-				tree.Close()
-			}
-		}
-	}()
-
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case result := <-ch:
-		if result.err != nil {
-			return nil, result.err
-		}
-		if result.tree == nil {
-			return nil, fmt.Errorf("failed to parse source: parser returned nil tree")
-		}
-		tree := result.tree
-		return &AST{
-			tree: tree,
-			src:  sourceCopy,
-			lang: p.srcLang,
-		}, nil
-	}
+	return &AST{tree: tree, src: source, lang: p.srcLang}, nil
 }
 
 // AST wraps a tree-sitter tree and the source bytes (locations and text preserved).

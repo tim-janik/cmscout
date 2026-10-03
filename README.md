@@ -101,8 +101,12 @@ Summary
 
 ## Install
 
-There are no prebuilt binaries; build from source.
-Requires Go 1.25+ and a C compiler.
+Release builds provide Linux x86-64 binary archives from Ubuntu 24.04.
+When a release is published, download its binary archive from
+[GitHub Releases](https://github.com/tim-janik/cmscout/releases), unpack it, and
+put `cmscout` on your PATH. The Git wrapper can stay beside the binary.
+
+To build from source, Go 1.25+ and a C compiler are required.
 Tree-sitter grammars are C libraries, so builds need `CGO_ENABLED=1`, which the Makefile sets.
 
 ```sh
@@ -130,7 +134,7 @@ GIT_EXTERNAL_DIFF=/path/to/git-diff-wrapper.sh git diff -- <file>
 git -c diff.external=/path/to/git-diff-wrapper.sh log --ext-diff -p
 ```
 
-The wrapper respects `NO_COLOR`, `CMCSOUT_WORD_DIFF`, `CMCSOUT_ADDED_STYLE`, `CMCSOUT_REMOVED_STYLE`, and `CMCSOUT_KEEP_UNCHANGED` environment variables. See the script for details.
+The wrapper respects `NO_COLOR`, `CMSCOUT_WORD_DIFF`, `CMSCOUT_ADDED_STYLE`, `CMSCOUT_REMOVED_STYLE`, and `CMSCOUT_KEEP_UNCHANGED` environment variables. See the script for details.
 
 
 ## License

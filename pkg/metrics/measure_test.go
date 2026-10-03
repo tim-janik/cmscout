@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"context"
 	"encoding/json"
 	"reflect"
 	"strings"
@@ -160,7 +159,7 @@ func TestComments_ambiguous_and_directives(t *testing.T) {
 
 func TestMeasure_damaged_source(t *testing.T) {
 	for _, source := range []string{"function f() {", "function f() { return '\xff'; }"} {
-		ast, err := analysis.Parse(context.Background(), []byte(source), "a.js")
+		ast, err := analysis.Parse([]byte(source), "a.js")
 		if err != nil {
 			t.Fatal(err)
 		}

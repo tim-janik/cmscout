@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"errors"
 	"flag"
@@ -215,7 +214,8 @@ func (mf metrics_flags) compare(cf compareFlags, paths []string, stdin io.Reader
 	}
 	var rendered bytes.Buffer
 	cf.oldName, cf.newName, cf.noColor = old_options.Path, new_options.Path, true
-	err = runSemanticReviewDocuments(cf, false, false, "white", "white", old_source, new_source, old_document, new_document, &rendered)
+	err = runSemanticReviewDocuments(cf, report.Options{NoColor: true, IgnoreSpace: cf.ignoreSpace},
+		old_source, new_source, old_document, new_document, &rendered)
 	if err != nil {
 		return err
 	}
@@ -235,7 +235,7 @@ func (mf metrics_flags) compare(cf compareFlags, paths []string, stdin io.Reader
 }
 
 func measure_for_diff(source string, options metrics.Options, separate_macros bool) (*metrics.Snapshot, *ir.SemanticDocument, error) {
-	ast, err := analysis.Parse(context.Background(), []byte(source), options.Path)
+	ast, err := analysis.Parse([]byte(source), options.Path)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -133,7 +133,7 @@ func changed_ranges(before, after []byte) ([]Span, []Span, map[uint]uint) {
 	old_index, new_index := index_source(before), index_source(after)
 	old_ranges, new_ranges := []Span{}, []Span{}
 	unchanged := map[uint]uint{}
-	result := diff.New().DiffFull(string(before), string(after))
+	result := diff.New().Diff(string(before), string(after))
 	for _, hunk := range result.Hunks {
 		for _, line := range hunk.Lines {
 			if line.Type == ir.DiffLineRemoved {

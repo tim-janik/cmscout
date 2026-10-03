@@ -3,7 +3,6 @@
 package parser
 
 import (
-	"context"
 	"testing"
 
 	"cmscout/pkg/lang"
@@ -18,7 +17,7 @@ func parseSrc(t *testing.T, name, src string) *AST {
 		t.Skipf("parser not available for %q: %v", name, err)
 	}
 	defer p.Close()
-	ast, err := p.Parse(context.Background(), []byte(src))
+	ast, err := p.Parse([]byte(src))
 	if err != nil {
 		t.Fatalf("Parse returned error for %q: %v", name, err)
 	}
@@ -123,5 +122,17 @@ func TestAST_missing_token_diagnostics(t *testing.T) {
 			}
 			t.Fatalf("missing closing brace not reported: %+v", diagnostics)
 		})
+	}
+}
+
+func TestAST_ErrorCount_MissingToken(t *testing.T) {
+	for _, src := range []string{
+		"int x = 1",
+		"int f() { return 0 }",
+	} {
+		ast := parseSrc(t, "c", src)
+		if n := ast.ErrorCount(); n < 1 {
+			t.Errorf("c source %q: ErrorCount=%d, want >= 1", src, n)
+		}
 	}
 }

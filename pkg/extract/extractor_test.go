@@ -3,7 +3,6 @@
 package extract
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -22,7 +21,7 @@ func extractSrc(t *testing.T, src string) []testBlock {
 	}
 	defer p.Close()
 
-	ast, err := p.Parse(context.Background(), []byte(src))
+	ast, err := p.Parse([]byte(src))
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
@@ -203,7 +202,7 @@ func extractFull(t *testing.T, src string) []ir.SemanticBlock {
 		t.Skipf("parser not available: %v", err)
 	}
 	defer p.Close()
-	ast, err := p.Parse(context.Background(), []byte(src))
+	ast, err := p.Parse([]byte(src))
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
@@ -433,7 +432,7 @@ func TestExtract_GoFunctionLocalDeclarations(t *testing.T) {
 	}
 	defer p.Close()
 	src := "package main\n\nconst top = 1\n\nfunc f() {\n\tx := 1\n\tconst local = 2\n\tvar v = 3\n}\n"
-	ast, err := p.Parse(context.Background(), []byte(src))
+	ast, err := p.Parse([]byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -468,7 +467,7 @@ func TestExtract_BashFunctionLocalAssignments(t *testing.T) {
 	}
 	defer p.Close()
 	src := "NAME=\"world\"\nfunction greet() {\n  LOCAL=\"x\"\n  echo \"hi\"\n}\n"
-	ast, err := p.Parse(context.Background(), []byte(src))
+	ast, err := p.Parse([]byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -493,7 +492,7 @@ func extractGoBlocks(t *testing.T, src string) []ir.SemanticBlock {
 		t.Skipf("parser not available: %v", err)
 	}
 	defer p.Close()
-	ast, err := p.Parse(context.Background(), []byte(src))
+	ast, err := p.Parse([]byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -652,7 +651,7 @@ func TestExtract_SourcePreserved(t *testing.T) {
 	}
 	defer p.Close()
 
-	ast, err := p.Parse(context.Background(), []byte(src))
+	ast, err := p.Parse([]byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -688,7 +687,7 @@ func extractLangBlocks(t *testing.T, name, src string, separateMacros bool) []ir
 		t.Skipf("parser not available for %q: %v", name, err)
 	}
 	defer p.Close()
-	ast, err := p.Parse(context.Background(), []byte(src))
+	ast, err := p.Parse([]byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}

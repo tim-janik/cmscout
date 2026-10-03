@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"context"
 	"reflect"
 	"strings"
 	"testing"
@@ -12,7 +11,7 @@ import (
 
 func source_tree(t *testing.T, path, source string) *parser.AST {
 	t.Helper()
-	ast, err := analysis.Parse(context.Background(), []byte(source), path)
+	ast, err := analysis.Parse([]byte(source), path)
 	if err != nil {
 		t.Fatal(err)
 	}

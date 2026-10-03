@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
 
@@ -54,7 +53,7 @@ func (mf metrics_flags) scan_files(paths []string, stdout io.Writer) error {
 }
 
 func measure_source(content []byte, options metrics.Options) (*metrics.Snapshot, error) {
-	ast, err := analysis.Parse(context.Background(), content, options.Path)
+	ast, err := analysis.Parse(content, options.Path)
 	if err != nil {
 		return nil, err
 	}
