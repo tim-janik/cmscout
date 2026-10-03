@@ -25,7 +25,8 @@ func WriteMetricsText(w io.Writer, snapshot *metrics.Snapshot) error {
 		return err
 	}
 	output := bufio.NewWriter(w)
-	fmt.Fprintf(output, "metrics %s (%s; functions; %s)\n", snapshot.Path, snapshot.Language, snapshot.Status)
+	path := strconv.Quote(snapshot.Path)
+	fmt.Fprintf(output, "metrics %s (%s; functions; %s)\n", path, snapshot.Language, snapshot.Status)
 	fmt.Fprintf(output, "profiles: %s\n", strings.Join(snapshot.Profiles, ", "))
 	for _, limitation := range snapshot.Limitations {
 		fmt.Fprintf(output, "scope: %s\n", limitation)
@@ -38,7 +39,7 @@ func WriteMetricsText(w io.Writer, snapshot *metrics.Snapshot) error {
 		count++
 		fmt.Fprintf(output, "\n%s\n", component.QualifiedName)
 		fmt.Fprintf(output, "  %s:%d:%d  cyclomatic=%s (%s)  lines=%d chars=%s\n",
-			snapshot.Path, component.Span.StartLine+1, component.Span.StartCol+1,
+			path, component.Span.StartLine+1, component.Span.StartCol+1,
 			metric_number(component.Cyclomatic.Value), component.Cyclomatic.Status, component.Size.Lines, metric_number(component.Size.Chars))
 		fmt.Fprintf(output, "  prefix_comment: %s\n", comment_size(component.PrefixComment))
 		if component.InlineComments == nil {
@@ -55,7 +56,7 @@ func WriteMetricsText(w io.Writer, snapshot *metrics.Snapshot) error {
 		}
 		for _, event := range component.Cyclomatic.Decisions {
 			fmt.Fprintf(output, "  +%d %s at %s:%d:%d\n", event.Contribution, event.Rule,
-				snapshot.Path, event.Span.StartLine+1, event.Span.StartCol+1)
+				path, event.Span.StartLine+1, event.Span.StartCol+1)
 		}
 	}
 	fmt.Fprintf(output, "\n%d callable definitions\n", count)
@@ -63,7 +64,7 @@ func WriteMetricsText(w io.Writer, snapshot *metrics.Snapshot) error {
 		if diagnostic.Span == nil {
 			fmt.Fprintf(output, "%s: %s\n", diagnostic.Kind, diagnostic.Message)
 		} else {
-			fmt.Fprintf(output, "%s:%d:%d: %s: %s\n", snapshot.Path, diagnostic.Span.StartLine+1,
+			fmt.Fprintf(output, "%s:%d:%d: %s: %s\n", path, diagnostic.Span.StartLine+1,
 				diagnostic.Span.StartCol+1, diagnostic.Kind, diagnostic.Message)
 		}
 	}

@@ -160,6 +160,25 @@ func TestMalformed_diff_flag_keeps_stdout_empty(t *testing.T) {
 	}
 }
 
+func TestMetrics_text_paths_escape_controls(t *testing.T) {
+	root := git_repository(t)
+	before := writeFile(t, root, "before.js", "function f(x) { return x; }\n")
+	after := writeFile(t, root, "après\n\x1b[31m.js", "function f(x) { return x ? 1 : 0; }\n")
+	git_test(t, root, "add", after)
+	for _, args := range [][]string{
+		{"--metrics", "--explain", after},
+		{"--metrics", before, after},
+		{"--metrics", "--scan", root},
+		{"--metrics", "--staged", "--root", root},
+	} {
+		var stdout, stderr bytes.Buffer
+		err := run(args, nil, &stdout, &stderr)
+		if err != nil || strings.Contains(stdout.String(), "\x1b") || !strings.Contains(stdout.String(), `après\n\x1b[31m.js"`) {
+			t.Fatalf("arguments=%v error=%v output=%q", args, err, stdout.String())
+		}
+	}
+}
+
 func TestMetric_context_discovery(t *testing.T) {
 	directory := t.TempDir()
 	for _, marker := range []string{"go.mod", "go.work", "compile_commands.json", ".git"} {

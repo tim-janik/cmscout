@@ -28,10 +28,10 @@ func WriteChangeSetText(w io.Writer, set *metrics.ChangeSet) error {
 		}
 	}
 	for _, skipped := range set.Skipped {
-		fmt.Fprintf(output, "skipped %q: %s\n", skipped.Path, skipped.Message)
+		fmt.Fprintf(output, "skipped %q: %q\n", skipped.Path, skipped.Message)
 	}
 	for _, diagnostic := range set.Diagnostics {
-		fmt.Fprintf(output, "%s %q: %s\n", diagnostic.Kind, diagnostic.Path, diagnostic.Message)
+		fmt.Fprintf(output, "%s %q: %q\n", diagnostic.Kind, diagnostic.Path, diagnostic.Message)
 	}
 	return output.Flush()
 }

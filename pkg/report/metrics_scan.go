@@ -27,10 +27,10 @@ func WriteScanText(w io.Writer, scan *metrics.ScanReport) error {
 		}
 	}
 	for _, skipped := range scan.Skipped {
-		fmt.Fprintf(output, "skipped %q: %s\n", skipped.Path, skipped.Message)
+		fmt.Fprintf(output, "skipped %q: %q\n", skipped.Path, skipped.Message)
 	}
 	for _, diagnostic := range scan.Diagnostics {
-		fmt.Fprintf(output, "%s %q: %s\n", diagnostic.Kind, diagnostic.Path, diagnostic.Message)
+		fmt.Fprintf(output, "%s %q: %q\n", diagnostic.Kind, diagnostic.Path, diagnostic.Message)
 	}
 	return output.Flush()
 }
