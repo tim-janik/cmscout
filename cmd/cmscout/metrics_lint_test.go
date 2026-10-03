@@ -16,7 +16,7 @@ func TestMetrics_lint_example(t *testing.T) {
 	}
 	directory := t.TempDir()
 	before := writeFile(t, directory, "before.js", "function f(x) { return x; }")
-	after := writeFile(t, directory, "after.js", "// documentation\nfunction f(x) { return x ? 1 : 0; }")
+	after := writeFile(t, directory, "après\n\x1b[31m.js", "// documentation\nfunction f(x) { return x ? 1 : 0; }")
 	comparison, err := comparison_output(t, "", "--metrics", "--format=json", before, after)
 	if err != nil {
 		t.Fatal(err)
@@ -42,6 +42,9 @@ func TestMetrics_lint_example(t *testing.T) {
 			output, _ := command.CombinedOutput()
 			if command.ProcessState.ExitCode() != test.code || !strings.Contains(string(output), test.message) {
 				t.Fatalf("lint exit=%d want=%d, output=%s", command.ProcessState.ExitCode(), test.code, output)
+			}
+			if test.code == 1 && (!strings.Contains(string(output), `après\n\x1b[31m.js:`) || strings.ContainsAny(string(output), "\x1b\r")) {
+				t.Fatalf("unsafe or unreadable filename: %q", output)
 			}
 		})
 	}

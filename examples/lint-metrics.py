@@ -5,6 +5,12 @@ import json
 import sys
 
 
+def display_text(value):
+    if not isinstance(value, str):
+        raise ValueError("missing report text")
+    return repr(value)[1:-1]
+
+
 def component_index(snapshot):
     if snapshot is None:
         return {}
@@ -46,6 +52,7 @@ def check_pair(report, limits):
         if new_name not in after:
             raise ValueError(f"missing after record: {new_name}")
         component = after[new_name]
+        new_name = display_text(new_name)
         if "cyclomatic" not in component:
             if component["kind"] in {"function", "method", "arrow_function", "lambda"}:
                 raise ValueError(f"missing function metrics: {new_name}")
@@ -56,7 +63,8 @@ def check_pair(report, limits):
         if metric["status"] != "complete":
             raise ValueError(f"incomplete function metrics: {new_name}")
         value = known_number(metric["value"], "complexity")
-        location = f'{report["after"]["path"]}:{component["span"]["start_line"] + 1}'
+        after_path = display_text(report["after"]["path"])
+        location = f'{after_path}:{component["span"]["start_line"] + 1}'
         if limits.max_complexity is not None and value > limits.max_complexity:
             print(f"{location}: {new_name}: complexity {value} exceeds {limits.max_complexity}")
             failed = True
@@ -76,7 +84,7 @@ def check_pair(report, limits):
                 chars = known_number(comment["chars"], "comment characters")
                 if chars > limits.max_comment_chars:
                     line = comment["span"]["start_line"] + 1
-                    print(f'{report["after"]["path"]}:{line}: {new_name}: '
+                    print(f'{after_path}:{line}: {new_name}: '
                           f'{role} comment has {chars} characters, limit {limits.max_comment_chars}')
                     failed = True
     return 1 if failed else 0
@@ -107,7 +115,7 @@ def main():
     try:
         return check(json.load(sys.stdin), limits)
     except (ValueError, KeyError, TypeError) as error:
-        print(f"invalid metrics report: {error}", file=sys.stderr)
+        print(f"invalid metrics report: {str(error)!r}", file=sys.stderr)
         return 2
 
 
