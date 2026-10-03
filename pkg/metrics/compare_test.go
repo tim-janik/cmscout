@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"cmscout/pkg/analysis"
 )
 
 func compare_sources(t *testing.T, path, before, after string) *Comparison {
@@ -86,6 +88,72 @@ func TestCompare_minified_component_limit(t *testing.T) {
 			result.RangePrecision != "unavailable" || len(result.Changes) != 0 || len(result.Diagnostics) != 1 ||
 			result.Diagnostics[0].Kind != "comparison_limit" || !strings.Contains(result.Diagnostics[0].Message, "component matching") {
 			t.Fatalf("minified callables bypassed comparison limit: %+v", result)
+		}
+	}
+}
+
+func TestCompare_partial_measurements_preserve_inventory(t *testing.T) {
+	for _, test := range []struct{ path, before, after string }{
+		{"a.js", "const a = () => 0, b = () => 0;\nfunction good(x) { return x; }\n",
+			"// docs\nconst a = () => 0, b = () => 0;\nfunction good(x) { return x ? 1 : 0; }\n"},
+		{"a.c", "int bad(int n) { int a[3]; return 0; }\nint good(int x) { return x; }\n",
+			"int bad(int n) { int a[n]; return 0; }\nint good(int x) { return x ? 1 : 0; }\n"},
+	} {
+		t.Run(test.path, func(t *testing.T) {
+			before, after := measurement(t, test.path, test.before), measurement(t, test.path, test.after)
+			result, err := Compare(before, after)
+			if err != nil {
+				t.Fatal(err)
+			}
+			good := change_named(t, result, "good")
+			if result.Status != "partial" || good.Match.Status != "matched" || good.Delta.Status != "complete" ||
+				good.Delta.Cyclomatic == nil || *good.Delta.Cyclomatic != 1 {
+				t.Fatalf("local measurement issue erased a known delta: %+v", good)
+			}
+			if test.path == "a.c" && change_named(t, result, "bad").Delta.Cyclomatic != nil {
+				t.Fatal("unsupported complexity acquired a numeric delta")
+			}
+			for _, added := range []bool{true, false} {
+				old, new := after, after
+				if added {
+					old = nil
+				} else {
+					new = nil
+				}
+				missing, err := Compare(old, new)
+				if err != nil || missing.Status != "partial" || len(missing.Changes) != len(after.Components) {
+					t.Fatalf("missing-file comparison failed: %+v %v", missing, err)
+				}
+				for _, change := range missing.Changes {
+					if change.Added != added || change.Removed == added || change.Match.Status == "unavailable" {
+						t.Fatalf("local measurement issue erased a known file change: %+v", change)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestCompare_untrusted_inventory(t *testing.T) {
+	for _, source := range []string{"function f() {", "function f() { return '\xff'; }"} {
+		before := measurement(t, "a.js", "function f() { return 0; }")
+		ast, err := analysis.Parse([]byte(source), "a.js")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ast.Close()
+		after, err := Measure(ast, Options{Namespace: "test", Path: "a.js"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, err := Compare(before, after)
+		if err != nil || result.Status != "partial" || len(result.Changes) == 0 {
+			t.Fatalf("damaged inventory comparison: %+v %v", result, err)
+		}
+		for _, change := range result.Changes {
+			if change.Match.Status != "unavailable" || change.Added || change.Removed || change.Delta.Status != "unavailable" {
+				t.Fatalf("damaged inventory gave trusted changes: %+v", change)
+			}
 		}
 	}
 }

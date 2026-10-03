@@ -275,8 +275,10 @@ lines and characters, prefix size, total inline-comment characters, and inline
 comment count. Inline arrays stay intact in both snapshots; entries are never
 subtracted by their array position. A missing side is null, with no invented
 zero score. Cross-language or different-profile deltas are `incomparable`.
-Incomplete analysis makes deltas `unavailable` and avoids claiming additions or
-removals from a damaged inventory.
+Parse or UTF-8 errors make matches and deltas `unavailable` and suppress additions
+and removals from the damaged inventory. Local comment or complexity problems
+keep valid matches, deltas, additions, and removals. Unknown metric values remain
+null. The overall report stays `partial` in both cases.
 
 `--word-diff`, `--word-diff-span-threshold`, and `--ignore-all-space` affect only
 the rendered diff in comparison mode. They do not filter touched names or change

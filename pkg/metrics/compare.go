@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 
 	"cmscout/pkg/ir"
 	"cmscout/pkg/matching"
@@ -26,6 +27,15 @@ func Compare(before, after *Snapshot) (*Comparison, error) {
 
 func CompareFiles(before, after *Snapshot) (*Comparison, error) {
 	return compare_snapshots(before, after, true)
+}
+
+func (snapshot *Snapshot) inventory_trusted() bool {
+	for _, diagnostic := range snapshot.Diagnostics {
+		if diagnostic.Kind == "invalid_utf8" || strings.HasPrefix(diagnostic.Kind, "parse_") {
+			return false
+		}
+	}
+	return true
 }
 
 func compare_snapshots(before, after *Snapshot, file_identity bool) (*Comparison, error) {
@@ -48,6 +58,10 @@ func compare_snapshots(before, after *Snapshot, file_identity bool) (*Comparison
 		Before: before, After: after, Changes: []Change{}, Diagnostics: []Diagnostic{},
 		BeforeRanges: []Span{}, AfterRanges: []Span{},
 	}
+	if before.Status != "complete" || after.Status != "complete" {
+		result.Status = "partial"
+	}
+	inventory_trusted := before.inventory_trusted() && after.inventory_trusted()
 	old_lines := bytes.Count(before.source, []byte{'\n'}) + 2
 	new_lines := bytes.Count(after.source, []byte{'\n'}) + 2
 	limit_message := ""
@@ -147,8 +161,7 @@ func compare_snapshots(before, after *Snapshot, file_identity bool) (*Comparison
 		} else {
 			change.DirectChanged = true
 		}
-		if before.Status != "complete" || after.Status != "complete" {
-			result.Status = "partial"
+		if !inventory_trusted {
 			change.Match.Status = "unavailable"
 			change.Added, change.Removed = false, false
 		}
