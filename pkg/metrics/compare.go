@@ -177,7 +177,11 @@ func compare_snapshots(before, after *Snapshot, file_identity bool) (*Comparison
 		return *name_a < *name_b
 	})
 	sort.SliceStable(result.Diagnostics, func(i, j int) bool {
-		return result.Diagnostics[i].Span.StartByte < result.Diagnostics[j].Span.StartByte
+		a, b := result.Diagnostics[i].Span, result.Diagnostics[j].Span
+		if a == nil || b == nil {
+			return a != nil
+		}
+		return a.StartByte < b.StartByte
 	})
 	return result, nil
 }

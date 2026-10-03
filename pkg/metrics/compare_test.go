@@ -61,6 +61,23 @@ func TestCompare_unchanged_and_snapshot_integrity(t *testing.T) {
 	}
 }
 
+func TestCompare_ambiguous_unresolved_owners(t *testing.T) {
+	result := compare_sources(t, "a.go",
+		"package p\nfunc (x Foo_A) f() {}\nfunc (x FooA) f() {}\n",
+		"package p\nfunc (x foo_a) f() {}\nfunc (x fooA) f() {}\n")
+	without_span := 0
+	for _, diagnostic := range result.Diagnostics {
+		if diagnostic.Span == nil {
+			without_span++
+		} else if without_span > 0 {
+			t.Fatal("positioned diagnostic sorted after a diagnostic without a span")
+		}
+	}
+	if result.Status != "partial" || without_span < 2 {
+		t.Fatalf("unresolved owners should be ambiguous: %+v", result)
+	}
+}
+
 func TestCompare_minified_component_limit(t *testing.T) {
 	source := strings.Repeat("call(() => 1);", 300)
 	for _, after := range []string{source, strings.Replace(source, "1", "2", 1)} {
