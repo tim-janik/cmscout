@@ -36,11 +36,7 @@ jobs:
     container:
       image: 'cimg/go:1.25.14@sha256:8d128f13dfe2b603924b2d9c3d30e8fae864a4e0f40cf1abd7a53bea7e270afc'
       options: --user circleci
-    env:
-      GOTOOLCHAIN: local
-      GOFLAGS: -mod=readonly
-      GOPATH: /tmp/go
-      GOCACHE: /tmp/go-build
+    env: { GOTOOLCHAIN: local, GOFLAGS: '-mod=readonly', GOPATH: /tmp/go, GOCACHE: /tmp/go-build }
     steps:
     - { uses: actions/checkout@v7, with: { fetch-depth: 0, fetch-tags: true, persist-credentials: false } }
     - run: git fetch --force --tags     # Fix actions/checkout#290
