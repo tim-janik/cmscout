@@ -45,7 +45,7 @@ tag=$(git log -1 --pretty='%(describe:tags,match=v[0-9]*.[0-9]*)' HEAD 2>/dev/nu
 version=${tag#v}
 rm -rf artifacts && mkdir artifacts
 printf 'Test archive\n' > "artifacts/example-$version.tar.xz"
-(cd artifacts && sha256sum "example-$version.tar.xz" > "example-$version-SHA256SUMS")
+(cd artifacts && sha256sum "example-$version.tar.xz" > "example-$version.SHA256SUMS")
 if [[ -n ${FAKE_MAKE_BADSUM-} ]]; then
   printf 'Tampered\n' >> "artifacts/example-$version.tar.xz"
 fi
