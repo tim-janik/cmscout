@@ -83,8 +83,11 @@ func (mf metrics_flags) compare_git_file(cf compareFlags, root string, pair sour
 	if err != nil {
 		return nil, err
 	}
+	if comparison.RangePrecision == "unavailable" {
+		return comparison, nil
+	}
 	var rendered bytes.Buffer
-	cf.oldName, cf.newName, cf.noColor = names[0], names[1], true
+	cf.oldName, cf.newName = names[0], names[1]
 	err = runSemanticReviewDocuments(cf, report.Options{NoColor: true, IgnoreSpace: cf.ignoreSpace},
 		contents[0], contents[1], documents[0], documents[1], &rendered)
 	if err != nil {

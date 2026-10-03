@@ -212,14 +212,16 @@ func (mf metrics_flags) compare(cf compareFlags, paths []string, stdin io.Reader
 	if err != nil {
 		return err
 	}
-	var rendered bytes.Buffer
-	cf.oldName, cf.newName, cf.noColor = old_options.Path, new_options.Path, true
-	err = runSemanticReviewDocuments(cf, report.Options{NoColor: true, IgnoreSpace: cf.ignoreSpace},
-		old_source, new_source, old_document, new_document, &rendered)
-	if err != nil {
-		return err
+	if comparison.RangePrecision != "unavailable" {
+		var rendered bytes.Buffer
+		cf.oldName, cf.newName = old_options.Path, new_options.Path
+		err = runSemanticReviewDocuments(cf, report.Options{NoColor: true, IgnoreSpace: cf.ignoreSpace},
+			old_source, new_source, old_document, new_document, &rendered)
+		if err != nil {
+			return err
+		}
+		comparison.Diff = &metrics.RenderedDiff{Format: "cmscout-text-v1", Text: rendered.String()}
 	}
-	comparison.Diff = &metrics.RenderedDiff{Format: "cmscout-text-v1", Text: rendered.String()}
 	if mf.format == "json" {
 		err = report.WriteComparisonJSON(stdout, comparison)
 	} else {

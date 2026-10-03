@@ -29,6 +29,37 @@ func comparison_output(t *testing.T, input string, args ...string) (*metrics.Com
 	return &comparison, err
 }
 
+func TestMetrics_large_comparison_keeps_snapshots(t *testing.T) {
+	root := git_repository(t)
+	source := strings.Repeat("\n", 10000) + "function f(x) { return x; }\n"
+	before := writeFile(t, root, "before.js", source)
+	after := writeFile(t, root, "a.js", source)
+	git_test(t, root, "add", "a.js")
+	git_test(t, root, "commit", "--quiet", "-m", "initial")
+	writeFile(t, root, "a.js", strings.Replace(source, "return x;", "return x ? 1 : 0;", 1))
+	git_test(t, root, "add", "a.js")
+	pair, err := comparison_output(t, "", "--metrics", "--format=json", "--root", root, before, after)
+	if exit_code(err) != 2 {
+		t.Fatalf("large pair did not return partial analysis: %v", err)
+	}
+	set, _, err := change_set_output(t, "--metrics", "--staged", "--format=json", "--root", root)
+	if exit_code(err) != 2 || set.Status != "partial" || len(set.Files) != 1 {
+		t.Fatalf("large Git comparison did not return partial analysis: %+v %v", set, err)
+	}
+	for _, comparison := range []*metrics.Comparison{pair, set.Files[0].Comparison} {
+		if comparison.Status != "partial" || comparison.RangePrecision != "unavailable" || comparison.Diff != nil ||
+			len(comparison.Changes) != 0 || len(comparison.BeforeRanges) != 0 || len(comparison.AfterRanges) != 0 ||
+			len(comparison.Diagnostics) != 1 || comparison.Diagnostics[0].Kind != "comparison_limit" ||
+			comparison.Before.Status != "complete" || comparison.After.Status != "complete" {
+			t.Fatalf("comparison limit lost snapshots or claimed changes: %+v", comparison)
+		}
+	}
+	unchanged, err := comparison_output(t, "", "--metrics", "--format=json", before, before)
+	if err != nil || unchanged.Status != "complete" || unchanged.Diff == nil || len(unchanged.Changes) != 0 {
+		t.Fatalf("identical large files were limited: %+v %v", unchanged, err)
+	}
+}
+
 func TestMetrics_comparison_all_languages(t *testing.T) {
 	directory := t.TempDir()
 	for _, test := range []struct{ extension, before, after string }{

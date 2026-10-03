@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"sort"
@@ -13,6 +14,8 @@ type component_pair struct {
 	before, after *Component
 	change        Change
 }
+
+const max_comparison_cells = 16_000_000
 
 func Compare(before, after *Snapshot) (*Comparison, error) {
 	return compare_snapshots(before, after, false)
@@ -40,6 +43,16 @@ func compare_snapshots(before, after *Snapshot, file_identity bool) (*Comparison
 	result := &Comparison{
 		SchemaVersion: "1", Status: "complete", RangePrecision: "original source lines",
 		Before: before, After: after, Changes: []Change{}, Diagnostics: []Diagnostic{},
+		BeforeRanges: []Span{}, AfterRanges: []Span{},
+	}
+	old_lines := bytes.Count(before.source, []byte{'\n'}) + 2
+	new_lines := bytes.Count(after.source, []byte{'\n'}) + 2
+	if !bytes.Equal(before.source, after.source) && old_lines > max_comparison_cells/new_lines {
+		result.Status, result.RangePrecision = "partial", "unavailable"
+		result.Diagnostics = append(result.Diagnostics, Diagnostic{
+			"comparison_limit", "line comparison exceeds 16 million cells; snapshots remain available", nil,
+		})
+		return result, nil
 	}
 	var unchanged_lines map[uint]uint
 	result.BeforeRanges, result.AfterRanges, unchanged_lines = changed_ranges(before.source, after.source)
