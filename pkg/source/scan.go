@@ -28,7 +28,7 @@ type Notice struct {
 
 type FileSet struct {
 	Root        string
-	Files       []File
+	Files       []string
 	Skipped     []Notice
 	Diagnostics []Notice
 }
@@ -165,7 +165,7 @@ func Scan(paths []string, root string, filter Filter) (*FileSet, error) {
 			return nil, err
 		}
 	}
-	result := &FileSet{Root: root, Files: []File{}, Skipped: []Notice{}, Diagnostics: []Notice{}}
+	result := &FileSet{Root: root, Files: []string{}, Skipped: []Notice{}, Diagnostics: []Notice{}}
 	seen := map[string]bool{}
 	sort.Strings(inputs)
 	for _, input := range inputs {
@@ -211,22 +211,14 @@ func Scan(paths []string, root string, filter Filter) (*FileSet, error) {
 				result.Skipped = append(result.Skipped, Notice{name, "unsupported_language", "unrecognized source extension"})
 				return nil
 			}
-			content, err := os.ReadFile(filename)
-			if err == nil {
-				err = CheckText(content)
-			}
-			if err != nil {
-				result.Diagnostics = append(result.Diagnostics, Notice{name, "read_error", err.Error()})
-			} else {
-				result.Files = append(result.Files, File{name, content})
-			}
+			result.Files = append(result.Files, name)
 			return nil
 		})
 		if err != nil {
 			return nil, err
 		}
 	}
-	sort.Slice(result.Files, func(i, j int) bool { return result.Files[i].Path < result.Files[j].Path })
+	sort.Strings(result.Files)
 	sort.Slice(result.Skipped, func(i, j int) bool { return result.Skipped[i].Path < result.Skipped[j].Path })
 	sort.Slice(result.Diagnostics, func(i, j int) bool { return result.Diagnostics[i].Path < result.Diagnostics[j].Path })
 	return result, nil
