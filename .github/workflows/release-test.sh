@@ -15,7 +15,8 @@ git init -q --initial-branch=trunk
 git config user.name 'Release Test'
 git config user.email release-test@example.invalid
 git remote add origin git@example.invalid:owner/example.git
-git add .; git commit -qm baseline; git tag -a v0.0.0 -m baseline
+cp "$scripts"/../../{.gitattributes,.version} .
+git add .; git commit -qm baseline; git tag v0.0.0
 printf '# NEWS\n\n## 0.1.0-rc.5\n\nCandidate notes.\n\n## 0.0.0\n\nOld notes.\n' > NEWS.md
 git add NEWS.md; git commit -qm 'Add release notes'
 git tag -a v0.1.0-rc.5 -m candidate
@@ -41,11 +42,11 @@ if [[ ${FAKE_MAKE_STATUS:-0} != 0 ]]; then
   echo 'make: simulated failure' >&2
   exit "$FAKE_MAKE_STATUS"
 fi
-tag=$(git log -1 --pretty='%(describe:tags,match=v[0-9]*.[0-9]*)' HEAD 2>/dev/null)
+tag=$(git archive HEAD .version | tar -xOf - | cut -d' ' -f1)
 version=${tag#v}
 rm -rf artifacts && mkdir artifacts
 printf 'Test archive\n' > "artifacts/example-$version.tar.xz"
-(cd artifacts && sha256sum "example-$version.tar.xz" > "example-$version-SHA256SUMS")
+(cd artifacts && sha256sum "example-$version.tar.xz" > "example-$version.SHA256SUMS")
 if [[ -n ${FAKE_MAKE_BADSUM-} ]]; then
   printf 'Tampered\n' >> "artifacts/example-$version.tar.xz"
 fi
@@ -70,6 +71,12 @@ expect_failure()
   fi
 }
 
+# First lightweight tag has no earlier release.
+git checkout -q v0.0.0
+.github/workflows/gh-release.sh v0.0.0 > "$work/echo"
+grep -qE '(^| )--prerelease( |$)' "$work/echo"
+grep -q baseline artifacts/.notes
+[[ ! -s $GH_TEST_LOG ]]
 # Annotated tag on its own commit: draft release with NEWS.md notes.
 git checkout -q v0.1.0-rc.5
 .github/workflows/gh-release.sh v0.1.0-rc.5 > "$work/echo"
@@ -110,6 +117,13 @@ grep -qx -- '--prerelease' "$GH_TEST_LOG"
 grep -qxi 'example 0.1.0-nightly.1' "$GH_TEST_LOG"
 grep -q 'Nightly work' "$GH_TEST_NOTES"
 expect_failure grep -q baseline "$GH_TEST_NOTES"
+
+: > "$GH_TEST_LOG"
+git tag -a v0.1.0-nightly.2 -m 'second tag'
+expect_failure env FAKE_MAKE_STATUS=3 .github/workflows/gh-release.sh --upload v0.1.0-nightly.1
+grep -qF 'differs from version tag v0.1.0-nightly.2' "$work/failure"
+[[ ! -s $GH_TEST_LOG ]]
+git tag -d v0.1.0-nightly.2 > /dev/null
 
 # Docker mode: each DOCKER_ENV item gets its own --env, image precedes the command.
 : > "$GH_TEST_LOG"

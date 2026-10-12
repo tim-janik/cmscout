@@ -56,13 +56,13 @@ dist: build ## Build source and binary release archives
 	git archive --prefix=$(package)/ --add-file=cmscout --add-file=artifacts/LICENSE \
 	  HEAD git-diff-wrapper.sh README.md doc | \
 	  xz -T1 -9 > artifacts/$(package).tar.xz
-	cd artifacts && sha256sum $(distname).tar.xz $(package).tar.xz > $(distname)-SHA256SUMS
+	cd artifacts && sha256sum $(distname).tar.xz $(package).tar.xz > $(distname).SHA256SUMS
 	ls -lh artifacts/*
 .PHONY: dist
-$(distname)-SHA256SUMS: dist
+$(distname).SHA256SUMS: dist
 
-distcheck: $(distname)-SHA256SUMS ## Check binary and source archive
-	cd artifacts && sha256sum -c $(distname)-SHA256SUMS
+distcheck: $(distname).SHA256SUMS ## Check binary and source archive
+	cd artifacts && sha256sum -c $(distname).SHA256SUMS
 	work=$$(mktemp -d) && trap 'rm -rf $$work' EXIT && \
 	  test "$$(xz -dc artifacts/$(package).tar.xz | git get-tar-commit-id || :)" = "$$(git rev-parse HEAD)" && \
 	  mkdir $$work/pkg && xz -dc artifacts/$(package).tar.xz | tar -x -C $$work/pkg && \

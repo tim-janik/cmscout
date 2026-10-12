@@ -6,13 +6,13 @@ set -Eeuo pipefail && SCRIPTNAME=${0##*/} && die() { [ -z "$*" ] || echo "$SCRIP
 # Build assets via `make distcheck` (docker: DOCKER_IMAGE, DOCKER_ENV,
 # DOCKER_PLATFORM) and create a GitHub release: lightweight tags give public
 # prereleases, annotated tags drafts, echoed unless --upload. Projects
-# provide `make distcheck` filling ./artifacts/ incl. $PROJECT-$VERSION-SHA256SUMS.
+# provide `make distcheck` filling ./artifacts/ incl. $PROJECT-$VERSION.SHA256SUMS.
 # Release-critical files:
-#   Makefile                version & date, dist, distcheck
 #   .version .gitattributes export-subst bakes version & date into source archives
+#   Makefile                version & date, dist, distcheck
 #   NEWS.md                 notes for annotated (draft) releases
-#   ci.yml                  Release job runs this script
 #   gh-release.sh           builds assets, creates the GitHub release
+#   ci.yml                  Release job runs this script
 
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || die 'not inside a git repository'
 cd "$ROOT"
@@ -31,9 +31,11 @@ while test $# -ne 0 ; do
   esac
   shift
 done
-TAG=${TAG:-$(git log -1 --pretty='%(describe:tags,match=v[0-9]*.[0-9]*)' HEAD 2>/dev/null)}
+VERSION_TAG=$(git archive HEAD .version | tar -xOf - | cut -d' ' -f1)
+TAG=${TAG:-$VERSION_TAG}
 [[ $TAG == v[0-9]*.[0-9]* && $TAG =~ ^v[0-9][a-zA-Z0-9.+_-]*$ ]] || die "invalid release tag: $TAG"
 [[ $(git rev-parse "refs/tags/$TAG^{commit}") == "$(git rev-parse HEAD)" ]] || die "$TAG does not point to HEAD"
+[[ $TAG == "$VERSION_TAG" ]] || die "$TAG differs from version tag $VERSION_TAG"
 VERSION=${TAG#v}
 
 # Project name from .git/config or checkout directory.
@@ -74,9 +76,9 @@ else
 fi
 
 # Verify release artifacts; make distcheck must have built $VERSION assets.
-[[ -f "artifacts/$PROJECT-$VERSION-SHA256SUMS" ]] ||
-  die "missing artifacts/$PROJECT-$VERSION-SHA256SUMS; make distcheck must build $VERSION artifacts"
-( cd artifacts && sha256sum -c "$PROJECT-$VERSION-SHA256SUMS" )
+[[ -f "artifacts/$PROJECT-$VERSION.SHA256SUMS" ]] ||
+  die "missing artifacts/$PROJECT-$VERSION.SHA256SUMS; make distcheck must build $VERSION artifacts"
+( cd artifacts && sha256sum -c "$PROJECT-$VERSION.SHA256SUMS" )
 
 # NEWS, extract the first version entry for annotated tags, extract_version()
 # accepts '##? v1.2 .*' style headings. Dotfiles in artifacts/* are ignored.
