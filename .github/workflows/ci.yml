@@ -16,14 +16,14 @@ permissions: { contents: read }
 jobs:
 
   Build-And-Test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - { uses: actions/checkout@v7, with: { fetch-depth: 0, fetch-tags: true } }
     - run: git fetch --force --tags     # Fix actions/checkout#290
     - { uses: actions/setup-go@v5, with: { go-version-file: go.mod } }
-    - run: make all
-    - run: make test
-    - run: make vet
+    - run: make -w distcheck
+    - uses: actions/upload-artifact@v7
+      with: { name: cmscout-Artifacts, path: artifacts/ }
     - run: shellcheck .github/workflows/*.sh
     - run: .github/workflows/release-test.sh
       if: github.ref_type != 'tag'        # skip release tooling tests, Release runs the real thing
@@ -31,7 +31,7 @@ jobs:
   Release:
     if: github.ref_type == 'tag'        # constrained by on.push.tags
     needs: [ Build-And-Test ]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { contents: write }    # allow github.token to create a release
     env:
       GH_TOKEN: '${{ github.token }}'
