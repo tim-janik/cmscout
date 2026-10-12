@@ -24,6 +24,7 @@ jobs:
     - run: make all
     - run: make test
     - run: make vet
+    - run: shellcheck .github/workflows/*.sh
     - run: .github/workflows/release-test.sh
       if: github.ref_type != 'tag'        # skip release tooling tests, Release runs the real thing
 
