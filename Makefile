@@ -3,11 +3,14 @@
 SHELL := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
 
-# Release version and commit date: git describe, else the .version file baked
-# into source archives by git export-subst; man pages take -M date="$(version_date)".
-TAG != git log -1 --pretty='%(describe:tags,match=v[0-9]*.[0-9]*)' HEAD 2>/dev/null || sed -n 's/ .*//p' .version 2>/dev/null
-version_date != git log -1 --format=%ci 2>/dev/null || sed -n 's/^[^ ]* //p' .version 2>/dev/null
+# Baked .version, else .version as git archive bakes it.
+version_info != grep -xm1 '^v\?[0-9][^$$]*' .version || git archive HEAD .version | tar -xOf -
+TAG := $(word 1, $(version_info))
+version_date := $(wordlist 2, 4, $(version_info))
 version = $(patsubst v%,%,$(TAG))
+ifeq ($(word 4, $(version_info)),)	# do we have any version?
+$(error Missing version information, need git describe or .version)
+endif
 distname := cmscout-$(version)
 platform = $(shell go env GOOS GOARCH | paste -sd-)
 package = $(distname)-$(platform)
@@ -34,7 +37,7 @@ vet: ## Run go vet
 # == build ==
 # CGO is required because tree-sitter grammars are C libraries.
 build: ## Build the cmscout binary
-	CGO_ENABLED=1 go build -buildvcs=false -trimpath $(if $(version),-ldflags '-X main.version=$(version)') -o cmscout ./cmd/cmscout
+	CGO_ENABLED=1 go build -buildvcs=false -trimpath -ldflags '-X main.version=$(version)' -o cmscout ./cmd/cmscout
 .PHONY: build
 
 version: ## Print the release version
