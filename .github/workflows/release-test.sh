@@ -10,13 +10,13 @@ unset DOCKER_IMAGE DOCKER_ENV DOCKER_PLATFORM
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 mkdir -p "$work/repo/.github/workflows" "$work/bin"
 cp "$scripts/gh-release.sh" "$work/repo/.github/workflows/"
-cp "$scripts/../../Makefile" "$work/repo/"
 cd "$work/repo"
 git init -q --initial-branch=trunk
 git config user.name 'Release Test'
 git config user.email release-test@example.invalid
 git remote add origin git@example.invalid:owner/example.git
-git add .; git commit -qm baseline; git tag -a v0.0.0 -m baseline
+cp "$scripts"/../../{.gitattributes,.version} .
+git add .; git commit -qm baseline; git tag v0.0.0
 printf '# NEWS\n\n## 0.1.0-rc.5\n\nCandidate notes.\n\n## 0.0.0\n\nOld notes.\n' > NEWS.md
 git add NEWS.md; git commit -qm 'Add release notes'
 git tag -a v0.1.0-rc.5 -m candidate
@@ -37,16 +37,16 @@ EOF
 cat > "$work/bin/make" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
-[[ ${1-} == dist || ${1-} == distcheck ]] || exec /usr/bin/make "$@"
+[[ ${1-} == distcheck ]]
 if [[ ${FAKE_MAKE_STATUS:-0} != 0 ]]; then
   echo 'make: simulated failure' >&2
   exit "$FAKE_MAKE_STATUS"
 fi
-tag=$(git log -1 --pretty='%(describe:tags,match=v[0-9]*.[0-9]*)' HEAD 2>/dev/null)
+tag=$(git archive HEAD .version | tar -xOf - | cut -d' ' -f1)
 version=${tag#v}
 rm -rf artifacts && mkdir artifacts
 printf 'Test archive\n' > "artifacts/example-$version.tar.xz"
-(cd artifacts && sha256sum "example-$version.tar.xz" > "example-$version-SHA256SUMS")
+(cd artifacts && sha256sum "example-$version.tar.xz" > "example-$version.SHA256SUMS")
 if [[ -n ${FAKE_MAKE_BADSUM-} ]]; then
   printf 'Tampered\n' >> "artifacts/example-$version.tar.xz"
 fi
@@ -71,9 +71,14 @@ expect_failure()
   fi
 }
 
+# First lightweight tag has no earlier release.
+git checkout -q v0.0.0
+.github/workflows/gh-release.sh v0.0.0 > "$work/echo"
+grep -qE '(^| )--prerelease( |$)' "$work/echo"
+grep -q baseline artifacts/.notes
+[[ ! -s $GH_TEST_LOG ]]
 # Annotated tag on its own commit: draft release with NEWS.md notes.
 git checkout -q v0.1.0-rc.5
-: > "$GH_TEST_LOG"
 .github/workflows/gh-release.sh v0.1.0-rc.5 > "$work/echo"
 grep -q 'gh release create' "$work/echo"
 grep -q -- '--verify-tag' "$work/echo"
@@ -81,12 +86,11 @@ grep -qE '(^| )--draft( |$)' "$work/echo"
 grep -q 'Candidate notes.' "$work/echo"
 expect_failure grep -q 'Old notes.' "$work/echo"
 [[ ! -s $GH_TEST_LOG ]]
-: > "$GH_TEST_LOG"
 .github/workflows/gh-release.sh --upload v0.1.0-rc.5
 [[ $(grep -cx create "$GH_TEST_LOG") == 1 ]]
 grep -qx -- '--verify-tag' "$GH_TEST_LOG"
 grep -qx -- '--draft' "$GH_TEST_LOG"
-grep -qx 'example 0.1.0-rc.5' "$GH_TEST_LOG"
+grep -qxi 'example 0.1.0-rc.5' "$GH_TEST_LOG"
 grep -qx 'Candidate notes.' "$GH_TEST_NOTES"
 expect_failure grep -q 'Old notes.' "$GH_TEST_NOTES"
 printf '## 0.1.0-rc.50\n' > NEWS.md
@@ -107,17 +111,22 @@ grep -q 'Nightly work' "$work/echo"
 expect_failure grep -q 'Add release notes' "$work/echo"
 expect_failure grep -q baseline "$work/echo"
 [[ ! -s $GH_TEST_LOG ]]
-: > "$GH_TEST_LOG"
 .github/workflows/gh-release.sh --upload v0.1.0-nightly.1
 [[ $(grep -cx create "$GH_TEST_LOG") == 1 ]]
 grep -qx -- '--prerelease' "$GH_TEST_LOG"
-grep -qx 'example 0.1.0-nightly.1' "$GH_TEST_LOG"
+grep -qxi 'example 0.1.0-nightly.1' "$GH_TEST_LOG"
 grep -q 'Nightly work' "$GH_TEST_NOTES"
 expect_failure grep -q baseline "$GH_TEST_NOTES"
 
+: > "$GH_TEST_LOG"
+git tag -a v0.1.0-nightly.2 -m 'second tag'
+expect_failure env FAKE_MAKE_STATUS=3 .github/workflows/gh-release.sh --upload v0.1.0-nightly.1
+grep -qF 'differs from version tag v0.1.0-nightly.2' "$work/failure"
+[[ ! -s $GH_TEST_LOG ]]
+git tag -d v0.1.0-nightly.2 > /dev/null
+
 # Docker mode: each DOCKER_ENV item gets its own --env, image precedes the command.
 : > "$GH_TEST_LOG"
-: > "$DOCKER_TEST_LOG"
 export DOCKER_IMAGE='example-ci:latest' DOCKER_ENV='GOPATH=/tmp/go GOCACHE=/tmp/go-build'
 .github/workflows/gh-release.sh --docker --upload v0.1.0-nightly.1
 [[ $(grep -B1 -x 'GOPATH=/tmp/go' "$DOCKER_TEST_LOG" | head -n1) == --env ]]

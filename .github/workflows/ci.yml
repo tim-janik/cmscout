@@ -16,21 +16,22 @@ permissions: { contents: read }
 jobs:
 
   Build-And-Test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - { uses: actions/checkout@v7, with: { fetch-depth: 0, fetch-tags: true } }
     - run: git fetch --force --tags     # Fix actions/checkout#290
     - { uses: actions/setup-go@v5, with: { go-version-file: go.mod } }
-    - run: make all
-    - run: make test
-    - run: make vet
+    - run: make -w distcheck
+    - uses: actions/upload-artifact@v7
+      with: { name: cmscout-Artifacts, path: artifacts/ }
+    - run: shellcheck .github/workflows/*.sh
     - run: .github/workflows/release-test.sh
       if: github.ref_type != 'tag'        # skip release tooling tests, Release runs the real thing
 
   Release:
     if: github.ref_type == 'tag'        # constrained by on.push.tags
     needs: [ Build-And-Test ]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: { contents: write }    # allow github.token to create a release
     env:
       GH_TOKEN: '${{ github.token }}'
@@ -42,14 +43,16 @@ jobs:
     - run: .github/workflows/gh-release.sh --docker --upload
 
   Ping-IRC:
-    # Always run, announce tag and trunk pushes only
-    if: ${{ always() && github.event_name == 'push' && (github.ref == 'refs/heads/trunk' || github.ref_type == 'tag') }}
-    runs-on: ubuntu-latest
+    # Announce tag and trunk pushes unless cancelled
+    if: ${{ !cancelled() && github.event_name == 'push' && (github.ref == 'refs/heads/trunk' || github.ref_type == 'tag') }}
     needs: [ Build-And-Test, Release ]
+    runs-on: ubuntu-latest
     steps:
     - { uses: actions/checkout@v7, with: { fetch-depth: 0 } }
-    - run: git fetch -f --tags  # Fix actions/checkout#290
+    - run: git fetch --force --tags     # Fix actions/checkout#290
+    - run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s .github/workflows -p test_ircbot.py -v # test_ircbot.py --preview
     - name: Ping-IRC
-      if: ${{ always() && !env.ACT }}   # IRCBOT_JOBS indicates 'success'
+      continue-on-error: true
+      if: ${{ !env.ACT }}  # IRCBOT_JOBS indicates 'success'
       env: { IRCBOT_JOBS: "${{ join(needs.*.result, ' ') }}" }
-      run: .github/workflows/ircbot.py -q -j "#Anklang" -G
+      run: .github/workflows/ircbot.py -s irc.libera.chat:6697 -G "#Anklang"

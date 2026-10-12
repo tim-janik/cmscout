@@ -6,13 +6,13 @@ set -Eeuo pipefail && SCRIPTNAME=${0##*/} && die() { [ -z "$*" ] || echo "$SCRIP
 # Build assets via `make distcheck` (docker: DOCKER_IMAGE, DOCKER_ENV,
 # DOCKER_PLATFORM) and create a GitHub release: lightweight tags give public
 # prereleases, annotated tags drafts, echoed unless --upload. Projects
-# provide `make distcheck` filling ./artifacts/ incl. $PROJECT-$VERSION-SHA256SUMS.
+# provide `make distcheck` filling ./artifacts/ incl. $PROJECT-$VERSION.SHA256SUMS.
 # Release-critical files:
-#   Makefile                version & date, dist, distcheck
 #   .version .gitattributes export-subst bakes version & date into source archives
+#   Makefile                version & date, dist, distcheck
 #   NEWS.md                 notes for annotated (draft) releases
-#   ci.yml                  Release job runs this script
 #   gh-release.sh           builds assets, creates the GitHub release
+#   ci.yml                  Release job runs this script
 
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || die 'not inside a git repository'
 cd "$ROOT"
@@ -31,21 +31,28 @@ while test $# -ne 0 ; do
   esac
   shift
 done
-TAG=${TAG:-$(git log -1 --pretty='%(describe:tags,match=v[0-9]*.[0-9]*)' HEAD 2>/dev/null)}
+VERSION_TAG=$(git archive HEAD .version | tar -xOf - | cut -d' ' -f1)
+TAG=${TAG:-$VERSION_TAG}
 [[ $TAG == v[0-9]*.[0-9]* && $TAG =~ ^v[0-9][a-zA-Z0-9.+_-]*$ ]] || die "invalid release tag: $TAG"
 [[ $(git rev-parse "refs/tags/$TAG^{commit}") == "$(git rev-parse HEAD)" ]] || die "$TAG does not point to HEAD"
+[[ $TAG == "$VERSION_TAG" ]] || die "$TAG differs from version tag $VERSION_TAG"
 VERSION=${TAG#v}
 
 # Project name from .git/config or checkout directory.
 PROJECT=$(git config --local --get remote.origin.url || :)
 PROJECT=${PROJECT%/}; PROJECT=${PROJECT##*/}; PROJECT=${PROJECT##*:}; PROJECT=${PROJECT%.git}
 PROJECT=${PROJECT:-${PWD##*/}}
-TITLE="${PROJECT^} $VERSION"
+TITLE="${PROJECT^^} $VERSION"
+
+extract_version()
+(
+  sed -nr '/^##? /s/^#+( [a-zA-Z_0-9-]+)? v?([0-9]\.[0-9][^ ]*)( .*)?$/\2/p' "$1" | head -1
+)
 
 # PRERELEASE for lightweight tags, DRAFT for annotated.
 KIND=--prerelease
 [[ $(git cat-file -t "refs/tags/$TAG") != tag ]] || KIND=--draft
-[[ $KIND != --draft || $(awk '/^##? /{h=$2; sub(/^v/, "", h); if (h !~ /^[0-9]/ && NF > 2) { h=$3; sub(/^v/, "", h) }; print h; exit}' NEWS.md) == "$VERSION" ]] || die 'NEWS mismatch'
+[[ $KIND != --draft || $(extract_version NEWS.md) == "$VERSION" ]] || die 'NEWS mismatch'
 
 # Build release assets, in docker if requested.
 if [[ $DOCKER ]]; then
@@ -69,21 +76,19 @@ else
 fi
 
 # Verify release artifacts; make distcheck must have built $VERSION assets.
-[[ -f "artifacts/$PROJECT-$VERSION-SHA256SUMS" ]] ||
-  die "missing artifacts/$PROJECT-$VERSION-SHA256SUMS; make distcheck must build $VERSION artifacts"
-( cd artifacts && sha256sum -c "$PROJECT-$VERSION-SHA256SUMS" )
+[[ -f "artifacts/$PROJECT-$VERSION.SHA256SUMS" ]] ||
+  die "missing artifacts/$PROJECT-$VERSION.SHA256SUMS; make distcheck must build $VERSION artifacts"
+( cd artifacts && sha256sum -c "$PROJECT-$VERSION.SHA256SUMS" )
 
-# NEWS, extract the first version entry for annotated tags; '# v1.1' and
-# '## 0.1.2 - 2000-01-02' style headings are fine. Dotfile stays out of artifacts/*.
+# NEWS, extract the first version entry for annotated tags, extract_version()
+# accepts '##? v1.2 .*' style headings. Dotfiles in artifacts/* are ignored.
 if [[ $KIND == --draft ]]; then
   [[ -f NEWS.md ]] || die 'Annotated release tags require NEWS.md'
-  awk -v version="$VERSION" '
+  awk -v V="$VERSION" '
     /^##? / {
       if (found) exit
-      heading = $2; sub(/^v/, "", heading)
-      if (heading !~ /^[0-9]/ && NF > 2) { heading = $3; sub(/^v/, "", heading) }
-      if (heading !~ /^[0-9]/) next
-      if (heading != version) exit 1
+      for (i = 1; i <= NF; i++) { s = $i; sub(/^v/, "", s); if (s == V) break }
+      if (i > NF) next
       found = 1
     }
     found { print }
