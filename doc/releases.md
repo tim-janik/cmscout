@@ -19,8 +19,8 @@ The version comes from Git tags, without the leading `v`.
 `make version` prints the version and date; `cmscout --version` prints the version.
 Without a tag or a baked `.version`, make stops with an error.
 
-To release, replace `Unreleased` in NEWS.md with the release version and commit it.
-For example, use `## Cmscout 0.1.0`, then create and push an annotated tag:
+To release, replace `NEXT` in NEWS.md with the release version and commit it.
+For example, use `## CMSCOUT 0.1.0`, then create and push an annotated tag:
 
 ```sh
 git tag -a v0.1.0 -m 'cmscout 0.1.0'
