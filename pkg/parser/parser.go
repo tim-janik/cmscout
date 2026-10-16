@@ -116,29 +116,49 @@ func (a *AST) Source() []byte { return a.src }
 // Language returns the language this AST was parsed with.
 func (a *AST) Language() lang.Language { return a.lang }
 
-// ErrorCount counts error and missing nodes: a non-zero count means extraction is
-// incomplete and must be surfaced. One-time walk; well-formed files return 0 directly.
+// ErrorCount includes missing tokens inserted during error recovery.
 func (a *AST) ErrorCount() int {
 	root := a.RootNode()
 	if root == nil || !root.HasError() {
 		return 0
 	}
-	return countErrors(root)
+	return len(a.Diagnostics())
 }
 
-// countErrors recursively counts error and missing nodes, including
-// anonymous/extra children so recovery nodes are not missed. Missing nodes
-// carry the kind of the token they stand in for, so IsMissing is required.
-func countErrors(n *tree_sitter.Node) int {
-	if n == nil {
-		return 0
+type Diagnostic struct {
+	Kind      string
+	Token     string
+	StartByte uint
+	EndByte   uint
+	StartLine uint
+	StartCol  uint
+	EndLine   uint
+	EndCol    uint
+}
+
+func (a *AST) Diagnostics() []Diagnostic {
+	diagnostics := []Diagnostic{}
+	root := a.RootNode()
+	if root == nil || !root.HasError() {
+		return diagnostics
 	}
-	count := 0
-	if n.IsError() || n.IsMissing() {
-		count++
+	var visit func(*tree_sitter.Node)
+	visit = func(node *tree_sitter.Node) {
+		if node.IsError() || node.IsMissing() {
+			kind := "error"
+			if node.IsMissing() {
+				kind = "missing"
+			}
+			start, end := node.StartPosition(), node.EndPosition()
+			diagnostics = append(diagnostics, Diagnostic{
+				Kind: kind, Token: node.Kind(), StartByte: node.StartByte(), EndByte: node.EndByte(),
+				StartLine: start.Row, StartCol: start.Column, EndLine: end.Row, EndCol: end.Column,
+			})
+		}
+		for i := uint(0); i < node.ChildCount(); i++ {
+			visit(node.Child(i))
+		}
 	}
-	for i := uint(0); i < n.ChildCount(); i++ {
-		count += countErrors(n.Child(i))
-	}
-	return count
+	visit(root)
+	return diagnostics
 }
