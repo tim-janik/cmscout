@@ -120,6 +120,12 @@ or from the clone:
 CGO_ENABLED=1 go install ./cmd/cmscout
 ```
 
+Contributors also need Python 3, ShellCheck and actionlint. Install actionlint
+with `go install github.com/rhysd/actionlint/cmd/actionlint@latest` and put the Go
+bin directory on PATH. Run `make check` for tests, lint and offline tooling checks.
+The removal check inspects committed changes; use CHECK_BASE and CHECK_HEAD to
+select a range. `make distcheck` checks the committed source and binary archives.
+
 
 ### Git integration
 
