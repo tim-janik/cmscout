@@ -44,10 +44,14 @@ version: ## Print the release version
 	@echo "$(version)  $(version_date)"
 .PHONY: version
 
+# DIST_VERSION overrides the release version, e.g. a nightly tag plus -g<hash>; dist bakes it into .version.
 dist: ## Build the source release archive
+	$(eval TAG := $(or $(DIST_VERSION),$(TAG)))
+	$(eval version_info := $(TAG) $(version_date))
+	$(eval distname := cmscout-$(version))
 	git diff --quiet HEAD -- || echo 'WARNING: working tree is dirty' >&2
-	rm -rf artifacts && mkdir artifacts
-	git archive --prefix=$(distname)/ HEAD | xz -T1 -9 > artifacts/$(distname).tar.xz
+	rm -rf artifacts && mkdir artifacts && echo '$(version_info)' > artifacts/.version
+	git archive --prefix=$(distname)/ --add-file=artifacts/.version HEAD ':!.version' | xz -T1 -9 > artifacts/$(distname).tar.xz
 	ls -lh artifacts/*
 .PHONY: dist
 
@@ -73,8 +77,8 @@ distcheck: dist ## Build and check release archives from the source tarball
 	  test "$$($$work/$(package)/cmscout --version)" = "cmscout $(version)" && \
 	  $$work/$(package)/cmscout --no-color testdata/old/knob.tsx testdata/new/knob.tsx | \
 	  grep -qE 'Matched:.*[1-9]'
-	cd artifacts && sha256sum $(distname).tar.xz $(package).tar.xz > $(distname).SHA256SUMS && \
-	  sha256sum -c $(distname).SHA256SUMS
+	cd artifacts && sha256sum $(distname).tar.xz $(package).tar.xz > SHA256SUMS && \
+	  sha256sum -c SHA256SUMS
 	ls -lh artifacts/*
 .PHONY: distcheck
 

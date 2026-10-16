@@ -34,10 +34,11 @@ entry point of each.
    and [doc/enclosed-comments.md](enclosed-comments.md).
 6. Word diff. `pkg/diff` fills each pair's `InnerDiff` from its final source text.
    See [doc/word-diff.md](word-diff.md).
-7. Report. `pkg/report` renders one section per kind (Imports, Functions,
-   Lambdas, Classes, Comments), a whole-file supplement under Other that only
-   fills gaps, and a Summary. See [doc/test-invariants.md](test-invariants.md)
-   for the coverage and duplication guarantees this layout must hold.
+7. Report. `pkg/report` renders one section per kind (Imports, Constants,
+   Classes, Functions, Methods, Lifecycle, JSX, Templates, Comments, and more),
+   a whole-file supplement under Other that only fills gaps, and a Summary. See
+   [doc/test-invariants.md](test-invariants.md) for the coverage and duplication
+   guarantees this layout must hold.
 
 Steps 4 and 5 are the only stages that mutate block sources; both run before
 the word diff so `InnerDiff` includes the rewritten text.

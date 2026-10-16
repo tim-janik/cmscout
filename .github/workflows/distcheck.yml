@@ -43,7 +43,7 @@ jobs:
     - run: make -w distcheck
     - uses: actions/upload-artifact@v7
       if: ${{ !cancelled() }}
-      with: { name: cmscout-Distcheck, path: artifacts/, retention-days: 7 }
+      with: { name: cmscout-Distcheck, path: artifacts/ }
 
   Ping-IRC:
     # Announce completed distchecks unless cancelled
