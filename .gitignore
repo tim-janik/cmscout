@@ -21,3 +21,6 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Python
+__pycache__/
