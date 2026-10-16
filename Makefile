@@ -44,9 +44,9 @@ version: ## Print the release version
 	@echo "$(version)  $(version_date)"
 .PHONY: version
 
-# DIST_TAG names release archives, e.g. a lightweight nightly tag; dist bakes version_info into .version.
+# DIST_VERSION overrides the release version, e.g. a nightly tag plus -g<hash>; dist bakes it into .version.
 dist: ## Build the source release archive
-	$(eval TAG := $(or $(DIST_TAG),$(TAG)))
+	$(eval TAG := $(or $(DIST_VERSION),$(TAG)))
 	$(eval version_info := $(TAG) $(version_date))
 	$(eval distname := cmscout-$(version))
 	git diff --quiet HEAD -- || echo 'WARNING: working tree is dirty' >&2

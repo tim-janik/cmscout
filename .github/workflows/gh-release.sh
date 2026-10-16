@@ -6,7 +6,7 @@ set -Eeuo pipefail && SCRIPTNAME=${0##*/} && die() { [ -z "$*" ] || echo "$SCRIP
 # Build assets via `make distcheck` (docker: DOCKER_IMAGE, DOCKER_ENV,
 # DOCKER_PLATFORM) and create a GitHub release: lightweight tags give public
 # prereleases, annotated tags drafts, echoed unless --upload. Projects
-# provide `make distcheck DIST_TAG=$TAG` filling ./artifacts/ incl. SHA256SUMS.
+# provide `make distcheck DIST_VERSION=$TAG[-g<hash>]` filling ./artifacts/ incl. SHA256SUMS.
 # Release-critical files:
 #   .version .gitattributes export-subst bakes version & date into source archives
 #   Makefile                version & date, dist, distcheck
@@ -56,6 +56,9 @@ KIND=--prerelease
 [[ $(git cat-file -t "refs/tags/$TAG") != tag ]] || KIND=--draft
 NEWS_VERSION=$(extract_version NEWS.md 2>/dev/null || :)
 [[ $KIND != --draft || $NEWS_VERSION == "$VERSION" ]] || die 'NEWS mismatch'
+# Lightweight tags may move or vanish, so their assets carry the commit hash.
+DIST_VERSION=$TAG
+[[ $KIND == --draft ]] || DIST_VERSION+=-g$(git rev-parse --short HEAD)
 
 # Build release assets, in docker if requested.
 if [[ $DOCKER ]]; then
@@ -73,15 +76,15 @@ if [[ $DOCKER ]]; then
   for kv in "${docker_envs[@]}" ; do env_args+=(--env "$kv") ; done
   docker run --rm --platform "${DOCKER_PLATFORM:-linux/amd64}" --user "$(id -u):$(id -g)" \
     "${mounts[@]}" --workdir "$PWD" "${env_args[@]}" \
-    "$DOCKER_IMAGE" make distcheck DIST_TAG="$TAG"
+    "$DOCKER_IMAGE" make distcheck DIST_VERSION="$DIST_VERSION"
 else
-  make distcheck DIST_TAG="$TAG"
+  make distcheck DIST_VERSION="$DIST_VERSION"
 fi
 
-# Verify release artifacts; make distcheck must have built $VERSION assets.
+# Verify release artifacts; make distcheck must have built $DIST_VERSION assets.
 [[ -f artifacts/SHA256SUMS ]] || die 'missing artifacts/SHA256SUMS'
-grep -qF "  $PROJECT-$VERSION." artifacts/SHA256SUMS ||
-  die "artifacts/SHA256SUMS lacks $PROJECT-$VERSION; make distcheck must build $VERSION artifacts"
+grep -qF "  $PROJECT-${DIST_VERSION#v}." artifacts/SHA256SUMS ||
+  die "artifacts/SHA256SUMS lacks $PROJECT-${DIST_VERSION#v}; make distcheck must build $DIST_VERSION artifacts"
 ( cd artifacts && sha256sum -c SHA256SUMS )
 
 # NEWS, use the top entry if it matches, extract_version() accepts '##? v1.2 .*'
@@ -119,6 +122,7 @@ fi
 echo "TITLE: $TITLE"
 echo "TAG: $TAG"
 echo "VERSION: $VERSION"
+echo "DIST_VERSION: $DIST_VERSION"
 echo "KIND: $KIND"
 echo "ARTIFACTS:" && ls -l artifacts/*
 echo "NOTES:" && cat artifacts/.notes

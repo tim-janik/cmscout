@@ -22,6 +22,7 @@ git add NEWS.md; git commit -qm 'Add release notes'
 git tag -a v0.1.0-rc.5 -m candidate
 git commit -qm 'Nightly work' --allow-empty
 git tag v0.1.0-nightly.1
+nightly_hash=$(git rev-parse --short HEAD)
 
 # .version describes from annotated tags only, also on a nightly tag.
 [[ $(git archive HEAD .version | tar -xOf -) == v0.1.0-rc.5-1-g*' '* ]]
@@ -40,12 +41,12 @@ EOF
 cat > "$work/bin/make" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
-[[ ${1-} == distcheck && ${2-} == DIST_TAG=v* ]]
+[[ ${1-} == distcheck && ${2-} == DIST_VERSION=v* ]]
 if [[ ${FAKE_MAKE_STATUS:-0} != 0 ]]; then
   echo 'make: simulated failure' >&2
   exit "$FAKE_MAKE_STATUS"
 fi
-version=${FAKE_MAKE_VERSION:-${2#DIST_TAG=v}}
+version=${FAKE_MAKE_VERSION:-${2#DIST_VERSION=v}}
 rm -rf artifacts && mkdir artifacts
 printf 'Test archive\n' > "artifacts/example-$version.tar.xz"
 (cd artifacts && sha256sum "example-$version.tar.xz" > SHA256SUMS)
@@ -93,6 +94,7 @@ expect_failure grep -q 'Old notes.' "$work/echo"
 grep -qx -- '--verify-tag' "$GH_TEST_LOG"
 grep -qx -- '--draft' "$GH_TEST_LOG"
 grep -qx 'artifacts/SHA256SUMS' "$GH_TEST_LOG"
+grep -qx 'artifacts/example-0.1.0-rc.5.tar.xz' "$GH_TEST_LOG"
 grep -qxi 'example 0.1.0-rc.5' "$GH_TEST_LOG"
 grep -qx 'Candidate notes.' "$GH_TEST_NOTES"
 expect_failure grep -q 'Old notes.' "$GH_TEST_NOTES"
@@ -121,6 +123,7 @@ expect_failure grep -q baseline "$work/echo"
 [[ $(grep -cx create "$GH_TEST_LOG") == 1 ]]
 grep -qx -- '--prerelease' "$GH_TEST_LOG"
 grep -qxi 'example 0.1.0-nightly.1' "$GH_TEST_LOG"
+grep -qx "artifacts/example-0.1.0-nightly.1-g$nightly_hash.tar.xz" "$GH_TEST_LOG"
 grep -q 'Nightly work' "$GH_TEST_NOTES"
 expect_failure grep -q baseline "$GH_TEST_NOTES"
 
@@ -158,7 +161,7 @@ export DOCKER_IMAGE='example-ci:latest' DOCKER_ENV='GOPATH=/tmp/go GOCACHE=/tmp/
 [[ $(grep -B1 -x 'GOPATH=/tmp/go' "$DOCKER_TEST_LOG" | head -n1) == --env ]]
 [[ $(grep -cx -- '--env' "$DOCKER_TEST_LOG") == 4 ]]
 grep -qx 'GOCACHE=/tmp/go-build' "$DOCKER_TEST_LOG"
-[[ $(tail -n4 "$DOCKER_TEST_LOG") == $'example-ci:latest\nmake\ndistcheck\nDIST_TAG=v0.1.0-nightly.1' ]]
+[[ $(tail -n4 "$DOCKER_TEST_LOG") == $'example-ci:latest\nmake\ndistcheck\nDIST_VERSION=v0.1.0-nightly.1-g'"$nightly_hash" ]]
 [[ $(grep -cx create "$GH_TEST_LOG") == 1 ]]
 unset DOCKER_IMAGE DOCKER_ENV
 
@@ -169,8 +172,8 @@ expect_failure grep -Eq '^(list|delete|upload|api)$' "$GH_TEST_LOG"
 : > "$GH_TEST_LOG"
 expect_failure env FAKE_MAKE_BADSUM=1 .github/workflows/gh-release.sh --upload v0.1.0-nightly.1
 [[ ! -s $GH_TEST_LOG ]]
-expect_failure env FAKE_MAKE_VERSION=0.1.0-nightly.10 .github/workflows/gh-release.sh --upload v0.1.0-nightly.1
-grep -qF 'SHA256SUMS lacks example-0.1.0-nightly.1' "$work/failure"
+expect_failure env FAKE_MAKE_VERSION=0.1.0-nightly.1 .github/workflows/gh-release.sh --upload v0.1.0-nightly.1
+grep -qF "SHA256SUMS lacks example-0.1.0-nightly.1-g$nightly_hash" "$work/failure"
 [[ ! -s $GH_TEST_LOG ]]
 expect_failure env FAKE_MAKE_STATUS=3 .github/workflows/gh-release.sh --upload v0.1.0-nightly.1
 expect_failure .github/workflows/gh-release.sh v0.0.0
