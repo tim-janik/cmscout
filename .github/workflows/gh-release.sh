@@ -10,7 +10,7 @@ set -Eeuo pipefail && SCRIPTNAME=${0##*/} && die() { [ -z "$*" ] || echo "$SCRIP
 # Release-critical files:
 #   .version .gitattributes export-subst bakes version & date into source archives
 #   Makefile                version & date, dist, distcheck
-#   NEWS.md                 notes for annotated (draft) releases
+#   NEWS.md                 notes when the top entry matches the release tag
 #   gh-release.sh           builds assets, creates the GitHub release
 #   ci.yml                  Release job runs this script
 
@@ -48,13 +48,14 @@ TITLE="${PROJECT^^} $VERSION"
 
 extract_version()
 (
-  sed -nr '/^##? /s/^#+( [a-zA-Z_0-9-]+)? v?([0-9]\.[0-9][^ ]*)( .*)?$/\2/p' "$1" | head -1
+  sed -nr '/^##? /{ s/^#+( [a-zA-Z_0-9-]+)? v?([0-9]+\.[0-9][^ ]*)( .*)?$/\2/p; t; /^## /q }' "$1" | head -1
 )
 
 # PRERELEASE for lightweight tags, DRAFT for annotated.
 KIND=--prerelease
 [[ $(git cat-file -t "refs/tags/$TAG") != tag ]] || KIND=--draft
-[[ $KIND != --draft || $(extract_version NEWS.md) == "$VERSION" ]] || die 'NEWS mismatch'
+NEWS_VERSION=$(extract_version NEWS.md 2>/dev/null || :)
+[[ $KIND != --draft || $NEWS_VERSION == "$VERSION" ]] || die 'NEWS mismatch'
 
 # Build release assets, in docker if requested.
 if [[ $DOCKER ]]; then
@@ -82,10 +83,9 @@ fi
   die "missing artifacts/$PROJECT-$VERSION.SHA256SUMS; make distcheck must build $VERSION artifacts"
 ( cd artifacts && sha256sum -c "$PROJECT-$VERSION.SHA256SUMS" )
 
-# NEWS, extract the first version entry for annotated tags, extract_version()
-# accepts '##? v1.2 .*' style headings. Dotfiles in artifacts/* are ignored.
-if [[ $KIND == --draft ]]; then
-  [[ -f NEWS.md ]] || die 'Annotated release tags require NEWS.md'
+# NEWS, use the top entry if it matches, extract_version() accepts '##? v1.2 .*'
+# style headings. Else git log for lightweight tags. Dotfiles in artifacts/* are ignored.
+if [[ $NEWS_VERSION == "$VERSION" ]]; then
   awk -v V="$VERSION" '
     /^##? / {
       if (found) exit

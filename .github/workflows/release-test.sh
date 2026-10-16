@@ -98,6 +98,9 @@ expect_failure grep -q 'Old notes.' "$GH_TEST_NOTES"
 printf '## 0.1.0-rc.50\n' > NEWS.md
 expect_failure env FAKE_MAKE_STATUS=3 .github/workflows/gh-release.sh v0.1.0-rc.5
 grep -q 'NEWS mismatch' "$work/failure"
+printf '## Unreleased\n\nFuture notes.\n\n## 0.1.0-rc.5\n\nCandidate notes.\n' > NEWS.md
+expect_failure env FAKE_MAKE_STATUS=3 .github/workflows/gh-release.sh v0.1.0-rc.5
+grep -q 'NEWS mismatch' "$work/failure"
 rm NEWS.md
 expect_failure env FAKE_MAKE_STATUS=3 .github/workflows/gh-release.sh v0.1.0-rc.5
 grep -q 'NEWS mismatch' "$work/failure"
@@ -119,6 +122,26 @@ grep -qx -- '--prerelease' "$GH_TEST_LOG"
 grep -qxi 'example 0.1.0-nightly.1' "$GH_TEST_LOG"
 grep -q 'Nightly work' "$GH_TEST_NOTES"
 expect_failure grep -q baseline "$GH_TEST_NOTES"
+
+# Lightweight tag with a matching top NEWS entry: prerelease with NEWS notes.
+git checkout -qb candidate
+printf '# NEWS\n\n## Example v0.1.2-rc1\n\nRC notes.\n\n## 0.1.0-rc.5\n\nOld notes.\n' > NEWS.md
+git add NEWS.md; git commit -qm 'Candidate work'
+git tag v0.1.2-rc1
+: > "$GH_TEST_LOG"
+.github/workflows/gh-release.sh --upload v0.1.2-rc1 > "$work/echo"
+grep -qx -- '--prerelease' "$GH_TEST_LOG"
+grep -qx 'RC notes.' "$GH_TEST_NOTES"
+expect_failure grep -q 'Old notes.' "$GH_TEST_NOTES"
+expect_failure grep -q 'Candidate work' "$GH_TEST_NOTES"
+for heading in '## Unreleased' '## 0.1.2-rc10'; do
+  printf '%s\n\nFuture notes.\n\n## 0.1.2-rc1\n\nRC notes.\n' "$heading" > NEWS.md
+  .github/workflows/gh-release.sh v0.1.2-rc1 > "$work/echo"
+  grep -q 'Candidate work' artifacts/.notes
+  expect_failure grep -q 'RC notes.' artifacts/.notes
+done
+git checkout -q -- NEWS.md
+git checkout -q trunk
 
 : > "$GH_TEST_LOG"
 git tag -a v0.1.0-nightly.2 -m 'second tag'
