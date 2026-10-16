@@ -31,8 +31,50 @@ bench: ## Run all benchmarks
 
 # == vet ==
 vet: ## Run go vet
-	go vet ./...
+	CGO_ENABLED=1 go vet ./...
 .PHONY: vet
+
+# == check ==
+check: test lint check-agents-md check-tooling check-removals ## Run working-tree and committed-history checks
+.PHONY: check
+
+lint: vet lint-go lint-shell lint-python lint-workflows ## Check owned source files and workflows
+.PHONY: lint
+
+lint-go:
+	@unformatted=$$(git ls-files -z --cached --others --exclude-standard -- '*.go' ':!testdata/**' ':!*.g.*' | xargs -0 -r gofmt -l); \
+	  test -z "$$unformatted" || { printf '%s\n' "$$unformatted"; exit 1; }
+.PHONY: lint-go
+
+lint-shell:
+	git ls-files -z --cached --others --exclude-standard -- '*.sh' ':!testdata/**' ':!*.g.*' | \
+	  xargs -0 -r shellcheck --severity=error
+.PHONY: lint-shell
+
+lint-python:
+	git ls-files -z --cached --others --exclude-standard -- '*.py' ':!testdata/**' ':!*.g.*' | xargs -0 -r python3 -c \
+	  'import ast, pathlib, sys; [ast.parse(pathlib.Path(p).read_text(), filename=p) for p in sys.argv[1:]]'
+.PHONY: lint-python
+
+lint-workflows:
+	actionlint
+.PHONY: lint-workflows
+
+check-agents-md: ## Check paths and make targets in AGENTS.md
+	python3 misc/check-agents-md.py AGENTS.md
+.PHONY: check-agents-md
+
+check-tooling: ## Test check scripts and mocked release and IRC tooling
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s misc -p 'test_*.py' -v
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s .github/workflows -p test_ircbot.py -v
+	.github/workflows/release-test.sh
+.PHONY: check-tooling
+
+CHECK_HEAD ?= HEAD
+export CHECK_BASE CHECK_HEAD
+check-removals: ## Check committed code removals; override CHECK_BASE and CHECK_HEAD to select a range
+	python3 misc/check-removals.py
+.PHONY: check-removals
 
 # == build ==
 # CGO is required because tree-sitter grammars are C libraries.
