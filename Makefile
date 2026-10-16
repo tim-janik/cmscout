@@ -77,8 +77,8 @@ distcheck: dist ## Build and check release archives from the source tarball
 	  test "$$($$work/$(package)/cmscout --version)" = "cmscout $(version)" && \
 	  $$work/$(package)/cmscout --no-color testdata/old/knob.tsx testdata/new/knob.tsx | \
 	  grep -qE 'Matched:.*[1-9]'
-	cd artifacts && sha256sum $(distname).tar.xz $(package).tar.xz > $(distname).SHA256SUMS && \
-	  sha256sum -c $(distname).SHA256SUMS
+	cd artifacts && sha256sum $(distname).tar.xz $(package).tar.xz > SHA256SUMS && \
+	  sha256sum -c SHA256SUMS
 	ls -lh artifacts/*
 .PHONY: distcheck
 

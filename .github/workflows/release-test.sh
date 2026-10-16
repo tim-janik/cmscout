@@ -45,10 +45,10 @@ if [[ ${FAKE_MAKE_STATUS:-0} != 0 ]]; then
   echo 'make: simulated failure' >&2
   exit "$FAKE_MAKE_STATUS"
 fi
-version=${2#DIST_TAG=v}
+version=${FAKE_MAKE_VERSION:-${2#DIST_TAG=v}}
 rm -rf artifacts && mkdir artifacts
 printf 'Test archive\n' > "artifacts/example-$version.tar.xz"
-(cd artifacts && sha256sum "example-$version.tar.xz" > "example-$version.SHA256SUMS")
+(cd artifacts && sha256sum "example-$version.tar.xz" > SHA256SUMS)
 if [[ -n ${FAKE_MAKE_BADSUM-} ]]; then
   printf 'Tampered\n' >> "artifacts/example-$version.tar.xz"
 fi
@@ -92,6 +92,7 @@ expect_failure grep -q 'Old notes.' "$work/echo"
 [[ $(grep -cx create "$GH_TEST_LOG") == 1 ]]
 grep -qx -- '--verify-tag' "$GH_TEST_LOG"
 grep -qx -- '--draft' "$GH_TEST_LOG"
+grep -qx 'artifacts/SHA256SUMS' "$GH_TEST_LOG"
 grep -qxi 'example 0.1.0-rc.5' "$GH_TEST_LOG"
 grep -qx 'Candidate notes.' "$GH_TEST_NOTES"
 expect_failure grep -q 'Old notes.' "$GH_TEST_NOTES"
@@ -167,6 +168,9 @@ expect_failure env GH_TEST_STATUS=9 .github/workflows/gh-release.sh --upload v0.
 expect_failure grep -Eq '^(list|delete|upload|api)$' "$GH_TEST_LOG"
 : > "$GH_TEST_LOG"
 expect_failure env FAKE_MAKE_BADSUM=1 .github/workflows/gh-release.sh --upload v0.1.0-nightly.1
+[[ ! -s $GH_TEST_LOG ]]
+expect_failure env FAKE_MAKE_VERSION=0.1.0-nightly.10 .github/workflows/gh-release.sh --upload v0.1.0-nightly.1
+grep -qF 'SHA256SUMS lacks example-0.1.0-nightly.1' "$work/failure"
 [[ ! -s $GH_TEST_LOG ]]
 expect_failure env FAKE_MAKE_STATUS=3 .github/workflows/gh-release.sh --upload v0.1.0-nightly.1
 expect_failure .github/workflows/gh-release.sh v0.0.0

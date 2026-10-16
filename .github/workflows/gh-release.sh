@@ -6,7 +6,7 @@ set -Eeuo pipefail && SCRIPTNAME=${0##*/} && die() { [ -z "$*" ] || echo "$SCRIP
 # Build assets via `make distcheck` (docker: DOCKER_IMAGE, DOCKER_ENV,
 # DOCKER_PLATFORM) and create a GitHub release: lightweight tags give public
 # prereleases, annotated tags drafts, echoed unless --upload. Projects
-# provide `make distcheck DIST_TAG=$TAG` filling ./artifacts/ incl. $PROJECT-$VERSION.SHA256SUMS.
+# provide `make distcheck DIST_TAG=$TAG` filling ./artifacts/ incl. SHA256SUMS.
 # Release-critical files:
 #   .version .gitattributes export-subst bakes version & date into source archives
 #   Makefile                version & date, dist, distcheck
@@ -79,9 +79,10 @@ else
 fi
 
 # Verify release artifacts; make distcheck must have built $VERSION assets.
-[[ -f "artifacts/$PROJECT-$VERSION.SHA256SUMS" ]] ||
-  die "missing artifacts/$PROJECT-$VERSION.SHA256SUMS; make distcheck must build $VERSION artifacts"
-( cd artifacts && sha256sum -c "$PROJECT-$VERSION.SHA256SUMS" )
+[[ -f artifacts/SHA256SUMS ]] || die 'missing artifacts/SHA256SUMS'
+grep -qF "  $PROJECT-$VERSION." artifacts/SHA256SUMS ||
+  die "artifacts/SHA256SUMS lacks $PROJECT-$VERSION; make distcheck must build $VERSION artifacts"
+( cd artifacts && sha256sum -c SHA256SUMS )
 
 # NEWS, use the top entry if it matches, extract_version() accepts '##? v1.2 .*'
 # style headings. Else git log for lightweight tags. Dotfiles in artifacts/* are ignored.
