@@ -1,10 +1,21 @@
 # cmscout
 
-cmscout matches code blocks across languages (functions, classes, methods, JSX elements, string templates, imports, constants) and diffs per block.
-A renamed method shows as one changed unit instead of a delete plus an add; a moved function keeps its block identity.
+cmscout compares two versions of a source file and shows what changed, one code block at a time.
+It recognizes functions, classes, methods, imports, JSX elements and other building blocks, so a renamed or moved function stays a single changed unit instead of a delete plus an add.
 
-Parsing uses tree-sitter. A staged hierarchical matcher then pairs blocks by name, kind, text similarity, and scope ancestry.
+Parsing uses tree-sitter, then a staged hierarchical matcher pairs blocks by name, kind, text similarity and scope ancestry.
 The output is deterministic: the same input always produces the same report.
+
+## Usage
+
+```sh
+cmscout old.ts new.ts                # semantic block diff
+cmscout --summary old.ts new.ts      # counts only
+cmscout --simple-diff a.txt b.txt    # plain whole-file line diff, any file type
+```
+
+One side can be `-` to read from stdin.
+`cmscout --help` lists the remaining options.
 
 ## When to use it
 
@@ -13,7 +24,7 @@ Use cmscout for stable block diffs across code motion: a block moves within a fi
 Line diffs (diff -u) treat every line independently. When a method moves, reorders, changes parameters, or alters its body, the change drowns in added and removed lines.
 cmscout pairs the blocks first, re-identifies the method's before and after versions, then renders line or word diffs for just the parts that changed.
 
-cmscout matches structural blocks in TS/TSX, JS/JSX, Go, Bash, C, and C++ and renders the change per block: similarity percentages, word-level intra-line changes, and `[changed]`/`[moved]`/`[converted]`/`[whitespace]` tags where applicable.
+cmscout matches structural blocks in TS/TSX, JS/JSX, Go, Bash, C, and C++ and renders the change per block: similarity percentages and `[changed]`/`[moved]`/`[converted]`/`[whitespace]` tags where applicable. Pass `--word-diff` to highlight changed words inside a line.
 
 ## How it works
 
@@ -23,8 +34,8 @@ The pipeline has several stages (detailed in [doc/pipeline.md](doc/pipeline.md))
 - Matching of semantic blocks in hierarchical stages by *name and kind*, *comment text*, *distance tables*
 - Collapsing replaces matched children inside matched parents with canonical reference comments (`// [matched: method foo]`), so the parent's diff stays small. See [doc/canonical-references.md](doc/canonical-references.md).
 - Prefix attachment merges doc-comment runs directly before a component into that component's diff. See [doc/prefix-comments.md](doc/prefix-comments.md) and [doc/enclosed-comments.md](doc/enclosed-comments.md).
-- Word diff splits each changed line into words, diffs them at word granularity, and merges long adjacent runs into spans. See [doc/word-diff.md](doc/word-diff.md).
-- Reporting renders one section per kind (imports, constants, classes, methods, functions, lifecycle, jsx, comments) and a summary.
+- Word diff splits each changed line into words, diffs them at word granularity, and merges long adjacent runs into spans. Pass `--word-diff` to enable it. See [doc/word-diff.md](doc/word-diff.md).
+- Reporting renders one section per kind (imports, constants, classes, functions, methods, lifecycle, JSX, templates, comments) and a summary.
 - Each block header shows a similarity percentage and the source code, with `[changed]`, `[moved]`, `[converted]`, and `[whitespace]` tags where they apply. See [doc/whitespace-classification.md](doc/whitespace-classification.md).
 
 ### Supported languages
@@ -35,8 +46,8 @@ C and C++ split function-like macros into their own block kind.
 
 ### Line coverage
 
-Every non-empty line of the before and after input files appears in the report output.
-Files in unsupported languages or with no semantic blocks fall back to a whole-file line diff.
+Every non-empty line of the before and after input files appears in the report output, unless `--skip-unchanged` drops unchanged blocks (they stay in the summary).
+Files in unsupported languages or with no semantic blocks fall back to a whole-file line diff; `--simple-diff` forces that fallback.
 
 ### Output example
 
@@ -85,9 +96,11 @@ Summary
 ## Install
 
 Release builds provide Linux x86-64 binary archives from Ubuntu 24.04.
-When a release is published, download its binary archive from
+When a release is published, download `cmscout-VERSION-linux-amd64.tar.xz` from
 [GitHub Releases](https://github.com/tim-janik/cmscout/releases), unpack it, and
 put `cmscout` on your PATH. The Git wrapper can stay beside the binary.
+Releases also provide the source archive and a `SHA256SUMS` file, and
+`cmscout --version` confirms the installed build.
 
 To build from source, Go 1.25+ and a C compiler are required.
 Tree-sitter grammars are C libraries, so builds need `CGO_ENABLED=1`, which the Makefile sets.
@@ -117,7 +130,9 @@ GIT_EXTERNAL_DIFF=/path/to/git-diff-wrapper.sh git diff -- <file>
 git -c diff.external=/path/to/git-diff-wrapper.sh log --ext-diff -p
 ```
 
-The wrapper respects `NO_COLOR`, `CMSCOUT_WORD_DIFF`, `CMSCOUT_ADDED_STYLE`, `CMSCOUT_REMOVED_STYLE`, and `CMSCOUT_KEEP_UNCHANGED` environment variables. See the script for details.
+The wrapper respects `NO_COLOR`, `CMSCOUT_WORD_DIFF`, `CMSCOUT_ADDED_STYLE`, `CMSCOUT_REMOVED_STYLE`, and `CMSCOUT_KEEP_UNCHANGED` environment variables.
+By default it passes `--ignore-all-space` and `--skip-unchanged`, so unchanged blocks stay hidden; set `CMSCOUT_WORD_DIFF=1` for word highlights and `CMSCOUT_KEEP_UNCHANGED=1` to show unchanged blocks.
+See the script for details.
 
 
 ## License
