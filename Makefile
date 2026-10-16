@@ -44,10 +44,14 @@ version: ## Print the release version
 	@echo "$(version)  $(version_date)"
 .PHONY: version
 
+# DIST_TAG names release archives, e.g. a lightweight nightly tag; dist bakes version_info into .version.
 dist: ## Build the source release archive
+	$(eval TAG := $(or $(DIST_TAG),$(TAG)))
+	$(eval version_info := $(TAG) $(version_date))
+	$(eval distname := cmscout-$(version))
 	git diff --quiet HEAD -- || echo 'WARNING: working tree is dirty' >&2
-	rm -rf artifacts && mkdir artifacts
-	git archive --prefix=$(distname)/ HEAD | xz -T1 -9 > artifacts/$(distname).tar.xz
+	rm -rf artifacts && mkdir artifacts && echo '$(version_info)' > artifacts/.version
+	git archive --prefix=$(distname)/ --add-file=artifacts/.version HEAD ':!.version' | xz -T1 -9 > artifacts/$(distname).tar.xz
 	ls -lh artifacts/*
 .PHONY: dist
 

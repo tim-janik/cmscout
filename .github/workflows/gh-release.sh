@@ -6,7 +6,7 @@ set -Eeuo pipefail && SCRIPTNAME=${0##*/} && die() { [ -z "$*" ] || echo "$SCRIP
 # Build assets via `make distcheck` (docker: DOCKER_IMAGE, DOCKER_ENV,
 # DOCKER_PLATFORM) and create a GitHub release: lightweight tags give public
 # prereleases, annotated tags drafts, echoed unless --upload. Projects
-# provide `make distcheck` filling ./artifacts/ incl. $PROJECT-$VERSION.SHA256SUMS.
+# provide `make distcheck DIST_TAG=$TAG` filling ./artifacts/ incl. $PROJECT-$VERSION.SHA256SUMS.
 # Release-critical files:
 #   .version .gitattributes export-subst bakes version & date into source archives
 #   Makefile                version & date, dist, distcheck
@@ -35,7 +35,9 @@ VERSION_TAG=$(git archive HEAD .version | tar -xOf - | cut -d' ' -f1)
 TAG=${TAG:-$VERSION_TAG}
 [[ $TAG == v[0-9]*.[0-9]* && $TAG =~ ^v[0-9][a-zA-Z0-9.+_-]*$ ]] || die "invalid release tag: $TAG"
 [[ $(git rev-parse "refs/tags/$TAG^{commit}") == "$(git rev-parse HEAD)" ]] || die "$TAG does not point to HEAD"
-[[ $TAG == "$VERSION_TAG" ]] || die "$TAG differs from version tag $VERSION_TAG"
+# Allow lightweight tags only on commits without an annotated version tag.
+[[ $TAG == "$VERSION_TAG" ]] || ! git describe --exact-match --match='v[0-9]*.[0-9]*' &>/dev/null ||
+  die "$TAG differs from version tag $VERSION_TAG"
 VERSION=${TAG#v}
 
 # Project name from .git/config or checkout directory.
@@ -70,9 +72,9 @@ if [[ $DOCKER ]]; then
   for kv in "${docker_envs[@]}" ; do env_args+=(--env "$kv") ; done
   docker run --rm --platform "${DOCKER_PLATFORM:-linux/amd64}" --user "$(id -u):$(id -g)" \
     "${mounts[@]}" --workdir "$PWD" "${env_args[@]}" \
-    "$DOCKER_IMAGE" make distcheck
+    "$DOCKER_IMAGE" make distcheck DIST_TAG="$TAG"
 else
-  make distcheck
+  make distcheck DIST_TAG="$TAG"
 fi
 
 # Verify release artifacts; make distcheck must have built $VERSION assets.

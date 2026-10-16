@@ -40,7 +40,8 @@ jobs:
     steps:
     - { uses: actions/checkout@v7, with: { fetch-depth: 0, fetch-tags: true, persist-credentials: false } }
     - run: git fetch --force --tags     # Fix actions/checkout#290
-    - run: make -w distcheck
+    - run: make -w distcheck DIST_TAG="$DIST_TAG"
+      env: { DIST_TAG: "${{ github.ref_type == 'tag' && github.ref_name || '' }}" }   # tag builds use the tag name
     - uses: actions/upload-artifact@v7
       if: ${{ !cancelled() }}
       with: { name: cmscout-Distcheck, path: artifacts/ }

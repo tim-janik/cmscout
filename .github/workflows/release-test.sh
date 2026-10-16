@@ -23,6 +23,9 @@ git tag -a v0.1.0-rc.5 -m candidate
 git commit -qm 'Nightly work' --allow-empty
 git tag v0.1.0-nightly.1
 
+# .version describes from annotated tags only, also on a nightly tag.
+[[ $(git archive HEAD .version | tar -xOf -) == v0.1.0-rc.5-1-g*' '* ]]
+
 export GH_TEST_LOG="$work/gh.log" GH_TEST_NOTES="$work/notes" DOCKER_TEST_LOG="$work/docker.log"
 cat > "$work/bin/gh" <<'EOF'
 #!/usr/bin/env bash
@@ -37,13 +40,12 @@ EOF
 cat > "$work/bin/make" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
-[[ ${1-} == distcheck ]]
+[[ ${1-} == distcheck && ${2-} == DIST_TAG=v* ]]
 if [[ ${FAKE_MAKE_STATUS:-0} != 0 ]]; then
   echo 'make: simulated failure' >&2
   exit "$FAKE_MAKE_STATUS"
 fi
-tag=$(git archive HEAD .version | tar -xOf - | cut -d' ' -f1)
-version=${tag#v}
+version=${2#DIST_TAG=v}
 rm -rf artifacts && mkdir artifacts
 printf 'Test archive\n' > "artifacts/example-$version.tar.xz"
 (cd artifacts && sha256sum "example-$version.tar.xz" > "example-$version.SHA256SUMS")
@@ -132,7 +134,7 @@ export DOCKER_IMAGE='example-ci:latest' DOCKER_ENV='GOPATH=/tmp/go GOCACHE=/tmp/
 [[ $(grep -B1 -x 'GOPATH=/tmp/go' "$DOCKER_TEST_LOG" | head -n1) == --env ]]
 [[ $(grep -cx -- '--env' "$DOCKER_TEST_LOG") == 4 ]]
 grep -qx 'GOCACHE=/tmp/go-build' "$DOCKER_TEST_LOG"
-[[ $(tail -n3 "$DOCKER_TEST_LOG") == $'example-ci:latest\nmake\ndistcheck' ]]
+[[ $(tail -n4 "$DOCKER_TEST_LOG") == $'example-ci:latest\nmake\ndistcheck\nDIST_TAG=v0.1.0-nightly.1' ]]
 [[ $(grep -cx create "$GH_TEST_LOG") == 1 ]]
 unset DOCKER_IMAGE DOCKER_ENV
 
