@@ -15,7 +15,7 @@ import (
 )
 
 func (mf metrics_flags) scan_files(paths []string, stdout io.Writer) error {
-	files, err := source.Scan(paths, mf.root, source.Filter{Include: mf.include, Exclude: mf.exclude})
+	files, err := mf.files(paths)
 	if err != nil {
 		return err
 	}

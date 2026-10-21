@@ -144,10 +144,6 @@ func git_parent(root, revision string, parent int) (string, error) {
 }
 
 func Git(options GitOptions) (*GitSet, error) {
-	if options.Mode != "revision" && (options.Revision != "" || options.Base != "" || options.Parent != 0) ||
-		options.Mode == "revision" && (options.Revision == "" || options.Parent < 0 || options.Base != "" && options.Parent != 0) {
-		return nil, fmt.Errorf("revision and parent options require one revision input mode")
-	}
 	if err := options.Filter.Validate(); err != nil {
 		return nil, err
 	}
