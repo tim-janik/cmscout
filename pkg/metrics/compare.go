@@ -21,11 +21,13 @@ type component_pair struct {
 const max_comparison_cells = 16_000_000
 const max_comparison_components = 2048
 
+// Compare matches the components of two snapshots; a path difference is not a change.
 func Compare(before, after *Snapshot) (*Comparison, error) {
 	return compare_snapshots(before, after, false)
 }
 
-func CompareFiles(before, after *Snapshot) (*Comparison, error) {
+// CompareWithRenames also reports a path difference as a rename of the file and a move of its components.
+func CompareWithRenames(before, after *Snapshot) (*Comparison, error) {
 	return compare_snapshots(before, after, true)
 }
 

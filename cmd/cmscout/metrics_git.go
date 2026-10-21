@@ -79,7 +79,7 @@ func (mf metrics_flags) compare_git_file(cf compareFlags, root string, pair sour
 			return nil, err
 		}
 	}
-	comparison, err := metrics.CompareFiles(snapshots[0], snapshots[1])
+	comparison, err := metrics.CompareWithRenames(snapshots[0], snapshots[1])
 	if err != nil {
 		return nil, err
 	}
