@@ -13,10 +13,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"cmscout/pkg/analysis"
 	"cmscout/pkg/extract"
 	"cmscout/pkg/ir"
 	"cmscout/pkg/metrics"
+	"cmscout/pkg/parser"
 	"cmscout/pkg/report"
 	"cmscout/pkg/source"
 )
@@ -209,7 +209,7 @@ func render_metrics_diff(cf compareFlags, names, contents [2]string, documents [
 }
 
 func measure_for_diff(source string, options metrics.Options, separate_macros bool) (*metrics.Snapshot, *ir.SemanticDocument, error) {
-	ast, err := analysis.Parse([]byte(source), options.Path)
+	ast, err := parser.ParsePath([]byte(source), options.Path)
 	if err != nil {
 		return nil, nil, err
 	}
