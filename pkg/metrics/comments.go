@@ -8,9 +8,8 @@ import (
 	"strings"
 )
 
-func (inv *inventory) measure_comments(index *source_index) ([]Comment, []Diagnostic) {
+func (inv *inventory) measure_comments(index *source_index) []Comment {
 	comments := []Comment{}
-	diagnostics := []Diagnostic{}
 	consumed := make([]bool, len(inv.comments))
 	anchors := map[uint][]int{}
 	for i, component := range inv.components {
@@ -49,22 +48,11 @@ func (inv *inventory) measure_comments(index *source_index) ([]Comment, []Diagno
 		}
 		span := index.span(inv.comments[first].StartByte(), end.EndByte)
 		comment := Comment{Size: *index.size(span), Span: span, Role: "prefix", Ownership: "complete"}
-		owners := anchors[offset]
-		if len(owners) == 1 {
-			component := &inv.components[owners[0]]
-			comment.OwnerName = component.QualifiedName
-			if component.FunctionMetrics != nil {
-				component.PrefixComment = &comment
-			}
-		} else {
-			comment.Ownership = "ambiguous"
-			for _, owner := range owners {
-				if component := &inv.components[owner]; component.FunctionMetrics != nil {
-					component.CommentStatus = "ambiguous"
-					component.PrefixComment = nil
-				}
-			}
-			diagnostics = append(diagnostics, Diagnostic{"ambiguous_comment", "prefix has more than one possible owner", span})
+		// Declarators sharing one declaration start, as in "const a = ..., b = ...", give the prefix to the first.
+		component := &inv.components[anchors[offset][0]]
+		comment.OwnerName = component.QualifiedName
+		if component.FunctionMetrics != nil {
+			component.PrefixComment = &comment
 		}
 		comments = append(comments, comment)
 		for i := first; i <= last; i++ {
@@ -105,7 +93,7 @@ func (inv *inventory) measure_comments(index *source_index) ([]Comment, []Diagno
 		}
 	}
 	sort.Slice(comments, func(i, j int) bool { return comments[i].Span.StartByte < comments[j].Span.StartByte })
-	return comments, diagnostics
+	return comments
 }
 
 func (inv *inventory) prefix_gap(end, start uint) bool {

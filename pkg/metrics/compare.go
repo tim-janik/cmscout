@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math"
 	"sort"
-	"strings"
 
 	"cmscout/pkg/ir"
 	"cmscout/pkg/matching"
@@ -31,15 +30,6 @@ func CompareWithRenames(before, after *Snapshot) (*Comparison, error) {
 	return compare_snapshots(before, after, true)
 }
 
-func (snapshot *Snapshot) inventory_trusted() bool {
-	for _, diagnostic := range snapshot.Diagnostics {
-		if diagnostic.Kind == "invalid_utf8" || strings.HasPrefix(diagnostic.Kind, "parse_") {
-			return false
-		}
-	}
-	return true
-}
-
 func compare_snapshots(before, after *Snapshot, file_identity bool) (*Comparison, error) {
 	if before == nil && after == nil {
 		return nil, fmt.Errorf("comparison requires at least one snapshot")
@@ -60,10 +50,11 @@ func compare_snapshots(before, after *Snapshot, file_identity bool) (*Comparison
 		Before: before, After: after, Changes: []Change{}, Diagnostics: []Diagnostic{},
 		BeforeRanges: []Span{}, AfterRanges: []Span{},
 	}
-	if before.Status != "complete" || after.Status != "complete" {
+	// Only parse errors and invalid UTF-8 make a snapshot partial, and both damage its inventory.
+	inventory_trusted := before.Status == "complete" && after.Status == "complete"
+	if !inventory_trusted {
 		result.Status = "partial"
 	}
-	inventory_trusted := before.inventory_trusted() && after.inventory_trusted()
 	old_lines := bytes.Count(before.source, []byte{'\n'}) + 2
 	new_lines := bytes.Count(after.source, []byte{'\n'}) + 2
 	limit_message := ""
