@@ -132,25 +132,7 @@ func compare_snapshots(before, after *Snapshot, file_identity bool) (*Comparison
 		change.AfterRanges = ranges_for(new, result.AfterRanges)
 		change.Added, change.Removed = old == nil, new == nil
 		if old != nil && new != nil {
-			change.Renamed = old.Kind != "file" && old.Name != new.Name
-			change.NameChanged = render_name(old.NameParts[2:]) != render_name(new.NameParts[2:])
-			change.KindChanged = old.Kind != new.Kind
-			change.Moved = old.ParentName != "" && parent_pairs[old.ParentName] != new.ParentName
-			if file_identity && before.Path != after.Path {
-				change.NameChanged, change.Moved = true, true
-				if old.Kind == "file" {
-					change.Renamed = true
-				}
-			}
-			change.CodeChanged = before.component_text(old, true, false) != after.component_text(new, true, false)
-			change.SignatureChanged = old.Body != nil && new.Body != nil &&
-				before.component_text(old, true, true) != after.component_text(new, true, true)
-			change.PrefixChanged = before.comment_text(old, "prefix") != after.comment_text(new, "prefix")
-			change.InlineChanged = before.comment_text(old, "inline") != after.comment_text(new, "inline")
-			directive_changed := before.comment_text(old, "directive") != after.comment_text(new, "directive")
-			raw_changed := before.component_text(old, false, false) != after.component_text(new, false, false)
-			change.FormattingChanged = raw_changed && !change.CodeChanged && !change.InlineChanged && !directive_changed
-			change.DirectChanged = raw_changed || change.PrefixChanged || change.InlineChanged || change.Renamed || change.KindChanged
+			compare_pair(change, old, new, before, after, parent_pairs, file_identity)
 		} else {
 			change.DirectChanged = true
 		}
@@ -190,6 +172,29 @@ func compare_snapshots(before, after *Snapshot, file_identity bool) (*Comparison
 		return a.StartByte < b.StartByte
 	})
 	return result, nil
+}
+
+// compare_pair sets the name, code and comment flags of a matched pair.
+func compare_pair(change *Change, old, new *Component, before, after *Snapshot, parent_pairs map[string]string, file_identity bool) {
+	change.Renamed = old.Kind != "file" && old.Name != new.Name
+	change.NameChanged = render_name(old.NameParts[2:]) != render_name(new.NameParts[2:])
+	change.KindChanged = old.Kind != new.Kind
+	change.Moved = old.ParentName != "" && parent_pairs[old.ParentName] != new.ParentName
+	if file_identity && before.Path != after.Path {
+		change.NameChanged, change.Moved = true, true
+		if old.Kind == "file" {
+			change.Renamed = true
+		}
+	}
+	change.CodeChanged = before.component_text(old, true, false) != after.component_text(new, true, false)
+	change.SignatureChanged = old.Body != nil && new.Body != nil &&
+		before.component_text(old, true, true) != after.component_text(new, true, true)
+	change.PrefixChanged = before.comment_text(old, "prefix") != after.comment_text(new, "prefix")
+	change.InlineChanged = before.comment_text(old, "inline") != after.comment_text(new, "inline")
+	directive_changed := before.comment_text(old, "directive") != after.comment_text(new, "directive")
+	raw_changed := before.component_text(old, false, false) != after.component_text(new, false, false)
+	change.FormattingChanged = raw_changed && !change.CodeChanged && !change.InlineChanged && !directive_changed
+	change.DirectChanged = raw_changed || change.PrefixChanged || change.InlineChanged || change.Renamed || change.KindChanged
 }
 
 func (change Change) touched() bool {
