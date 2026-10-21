@@ -56,7 +56,8 @@ The prefix rule mirrors `AttachPrefixComments` in the diff pipeline: a comment
 run attaches only when it ends on the line directly above the block
 (`EndLine+1 == StartLine`, no blank line in between) and every member is an
 own-line comment (only whitespace before it on its line), so a trailing comment
-on the line above never counts as a prefix. Extraction-time run merging applies
+on the line above never counts as a prefix. When several blocks start on that
+line, only the first one owns the run. Extraction-time run merging applies
 (see [prefix-comments.md](prefix-comments.md)), so `//` runs come back as one
 comment block.
 

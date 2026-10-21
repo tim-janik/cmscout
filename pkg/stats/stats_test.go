@@ -363,3 +363,10 @@ func TestAnalyze_MethodOwners(t *testing.T) {
 		t.Fatalf("out-of-class definition counted twice: %+v", cppReport.Blocks)
 	}
 }
+
+func TestAnalyze_SharedPrefixHasOneOwner(t *testing.T) {
+	r := analyzeSrc(t, "js", ".js", "p.js", "// doc\nconst a = () => 0, b = () => 1;\n", Options{})
+	if a, b := findBlock(r, "a"), findBlock(r, "b"); a == nil || b == nil || a.PrefixLines != 1 || b.PrefixLines != 0 {
+		t.Fatalf("one prefix comment claimed by several blocks: %+v", r.Blocks)
+	}
+}
