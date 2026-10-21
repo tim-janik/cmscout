@@ -99,31 +99,13 @@ func (snapshot *Snapshot) component_text(component *Component, tokens, signature
 	return result.String()
 }
 
-func (snapshot *Snapshot) comment_text(component *Component, prefix bool) string {
+func (snapshot *Snapshot) comment_text(component *Component, role string) string {
 	if component == nil {
 		return ""
 	}
 	var result strings.Builder
 	for _, comment := range snapshot.Comments {
-		role_matches := comment.Role == "prefix"
-		if !prefix {
-			role_matches = comment.Role == "inline"
-		}
-		if comment.OwnerName == component.QualifiedName && role_matches && comment.Span != nil {
-			result.Write(snapshot.source[comment.Span.StartByte:comment.Span.EndByte])
-			result.WriteByte(0)
-		}
-	}
-	return result.String()
-}
-
-func (snapshot *Snapshot) directive_text(component *Component) string {
-	if component == nil {
-		return ""
-	}
-	var result strings.Builder
-	for _, comment := range snapshot.Comments {
-		if comment.OwnerName == component.QualifiedName && comment.Role == "directive" && comment.Span != nil {
+		if comment.OwnerName == component.QualifiedName && comment.Role == role && comment.Span != nil {
 			result.Write(snapshot.source[comment.Span.StartByte:comment.Span.EndByte])
 			result.WriteByte(0)
 		}

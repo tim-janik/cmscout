@@ -152,9 +152,9 @@ func compare_snapshots(before, after *Snapshot, file_identity bool) (*Comparison
 			change.CodeChanged = before.component_text(old, true, false) != after.component_text(new, true, false)
 			change.SignatureChanged = old.Body != nil && new.Body != nil &&
 				before.component_text(old, true, true) != after.component_text(new, true, true)
-			change.PrefixChanged = before.comment_text(old, true) != after.comment_text(new, true)
-			change.InlineChanged = before.comment_text(old, false) != after.comment_text(new, false)
-			directive_changed := before.directive_text(old) != after.directive_text(new)
+			change.PrefixChanged = before.comment_text(old, "prefix") != after.comment_text(new, "prefix")
+			change.InlineChanged = before.comment_text(old, "inline") != after.comment_text(new, "inline")
+			directive_changed := before.comment_text(old, "directive") != after.comment_text(new, "directive")
 			raw_changed := before.component_text(old, false, false) != after.component_text(new, false, false)
 			change.FormattingChanged = raw_changed && !change.CodeChanged && !change.InlineChanged && !directive_changed
 			change.DirectChanged = raw_changed || change.PrefixChanged || change.InlineChanged || change.Renamed || change.KindChanged
