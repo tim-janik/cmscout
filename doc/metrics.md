@@ -84,11 +84,12 @@ records also expose their corresponding entries for convenience.
 
 ## Counting profile
 
-JSON schema `1` records `cyclomatic-v2` and `size-comments-v1`. Version 2
-counts Go case values and Bash pattern alternatives separately, uses clauses
-minus one for Go select, recognizes C++ alternative operators and Bash test
-operators, excludes static assertions, and skips C array length expressions.
-Scores from different profile versions must not be compared as metric deltas.
+JSON schema `1` records `cyclomatic-v2` and `size-comments-v1`. Stats mode uses
+the same engine. Version 2 counts Go case values and Bash pattern alternatives
+separately, uses clauses minus one for Go select, recognizes C++ alternative
+operators and Bash test operators, excludes static assertions, and skips C array
+length expressions. Scores from different profile versions must not be compared
+as metric deltas.
 These profiles describe source syntax. They do not build a control-flow graph,
 resolve types, fold constants, or establish how many tests prove correctness.
 

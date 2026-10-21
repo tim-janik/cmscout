@@ -24,15 +24,12 @@ import (
 )
 
 type metrics_flags struct {
+	scan_flags
 	enabled    bool
 	format     string
-	root       string
 	name       string
 	stdin_name string
 	explain    bool
-	scan       bool
-	include    []string
-	exclude    []string
 	staged     bool
 	worktree   bool
 	revision   string
@@ -43,24 +40,15 @@ type metrics_flags struct {
 func (mf *metrics_flags) register(fs *flag.FlagSet) {
 	fs.BoolVar(&mf.enabled, "metrics", false, "measure one source file, or compare two files")
 	fs.StringVar(&mf.format, "format", "text", "metrics output format: text or json")
-	fs.StringVar(&mf.root, "root", "", "source root for qualified metric names")
+	mf.scan_flags.register(fs)
 	fs.StringVar(&mf.name, "name", "", "logical name for a single metrics input")
 	fs.StringVar(&mf.stdin_name, "stdin-name", "", "logical filename and language for metrics read from stdin")
 	fs.BoolVar(&mf.explain, "explain", false, "include the decisions contributing to complexity")
-	fs.BoolVar(&mf.scan, "scan", false, "measure files and directories independently")
 	fs.BoolVar(&mf.staged, "staged", false, "compare HEAD with the index")
 	fs.BoolVar(&mf.worktree, "worktree", false, "compare the index with tracked working files")
 	fs.StringVar(&mf.revision, "revision", "", "compare a commit with its parent or --base")
 	fs.StringVar(&mf.base, "base", "", "base commit for --revision")
 	fs.IntVar(&mf.parent, "parent", 0, "parent number for --revision, starting at 1")
-	fs.Func("include", "include root-relative scan glob, repeatable", func(value string) error {
-		mf.include = append(mf.include, value)
-		return nil
-	})
-	fs.Func("exclude", "exclude root-relative scan glob, repeatable", func(value string) error {
-		mf.exclude = append(mf.exclude, value)
-		return nil
-	})
 }
 
 func metrics_requested(fs *flag.FlagSet, args []string) bool {

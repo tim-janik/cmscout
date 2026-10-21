@@ -32,20 +32,24 @@ func main() {
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	var (
-		cf            compareFlags
-		mf            metrics_flags
-		summary       bool
-		skipUnchanged bool
-		simpleDiff    bool
-		addedStyle    string
-		removedStyle  string
-		show_version  bool
+		cf                compareFlags
+		mf                metrics_flags
+		stats_mode        bool
+		max_comment_lines int
+		summary           bool
+		skipUnchanged     bool
+		simpleDiff        bool
+		addedStyle        string
+		removedStyle      string
+		show_version      bool
 	)
 
 	fs := flag.NewFlagSet("cmscout", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cf.register(fs)
 	mf.register(fs)
+	fs.BoolVar(&stats_mode, "stats", false, "report single-file block statistics")
+	fs.IntVar(&max_comment_lines, "max-comment-lines", 5, "flag long comments in --stats (0 disables)")
 	fs.BoolVar(&show_version, "version", false, "show version")
 	fs.BoolVar(&summary, "summary", false, "show only summary statistics")
 	fs.BoolVar(&skipUnchanged, "skip-unchanged", false, "suppress entirely unchanged components (blocks identical on both sides)")
@@ -64,6 +68,18 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		}
 		printUsage(stderr)
 		return err
+	}
+	if stats_mode {
+		return run_stats_flags(fs, cf, mf.scan_flags, max_comment_lines, stdin, stdout)
+	}
+	stats_only := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "max-comment-lines" {
+			stats_only = true
+		}
+	})
+	if stats_only {
+		return fmt.Errorf("--max-comment-lines requires --stats")
 	}
 	if mf.enabled {
 		if err := mf.run(fs, cf, stdin, stdout); err != nil {
@@ -299,6 +315,8 @@ func printUsage(w io.Writer) {
 Usage:
   cmscout [flags] <old_file> <new_file>
   cmscout --simple-diff [flags] <old_file> <new_file>
+  cmscout --stats [flags] <file>
+  cmscout --stats --scan [flags] [path ...]
   cmscout --metrics [flags] <file>
   cmscout --metrics [flags] <before_file> <after_file>
   cmscout --metrics --scan [flags] [path ...]
@@ -314,6 +332,8 @@ Usage:
   (only one side may be stdin).
 
 Flags:
+  --stats                Report single-file block sizes, comments, methods and complexity
+  --max-comment-lines N  In --stats, flag long comments (default 5; 0 disables)
   --metrics              Measure one file, or compare metrics and diff two files
   --format text|json     Metrics output format (default: text)
   --explain              Include each complexity decision and its location
