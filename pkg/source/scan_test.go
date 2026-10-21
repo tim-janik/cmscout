@@ -74,3 +74,19 @@ func TestScan_unreadable_directory_and_exclusions(t *testing.T) {
 		t.Fatalf("excluded directory was visited: %+v %v", result, err)
 	}
 }
+
+func TestScan_root_below_git_directory(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".git", "worktrees", "tree")
+	for _, name := range []string{"a.go", ".git/b.go"} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(root, name)), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, name), nil, 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	result, err := Scan([]string{root}, root, Filter{})
+	if err != nil || len(result.Files) != 1 || result.Files[0] != "a.go" || len(result.Skipped) != 1 || result.Skipped[0].Path != ".git" {
+		t.Fatalf("only nested Git metadata should be skipped: %+v %v", result, err)
+	}
+}
