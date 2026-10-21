@@ -4,19 +4,12 @@ package report
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
 
 	"cmscout/pkg/metrics"
 )
-
-func WriteComparisonJSON(w io.Writer, comparison *metrics.Comparison) error {
-	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(comparison)
-}
 
 func WriteComparisonText(w io.Writer, comparison *metrics.Comparison) error {
 	output := bufio.NewWriter(w)

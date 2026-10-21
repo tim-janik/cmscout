@@ -4,18 +4,11 @@ package report
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"io"
 
 	"cmscout/pkg/metrics"
 )
-
-func WriteScanJSON(w io.Writer, scan *metrics.ScanReport) error {
-	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(scan)
-}
 
 func WriteScanText(w io.Writer, scan *metrics.ScanReport) error {
 	output := bufio.NewWriter(w)

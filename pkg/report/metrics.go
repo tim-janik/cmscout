@@ -13,10 +13,10 @@ import (
 	"cmscout/pkg/metrics"
 )
 
-func WriteMetricsJSON(w io.Writer, snapshot *metrics.Snapshot) error {
+func WriteJSON(w io.Writer, value any) error {
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
-	return encoder.Encode(snapshot)
+	return encoder.Encode(value)
 }
 
 func WriteMetricsText(w io.Writer, snapshot *metrics.Snapshot) error {

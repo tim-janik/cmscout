@@ -39,7 +39,7 @@ func (mf metrics_flags) git_files(mode string, cf compareFlags, stdout io.Writer
 		result.Status = "partial"
 	}
 	if mf.format == "json" {
-		err = report.WriteChangeSetJSON(stdout, result)
+		err = report.WriteJSON(stdout, result)
 	} else {
 		err = report.WriteChangeSetText(stdout, result)
 	}

@@ -4,18 +4,11 @@ package report
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"io"
 
 	"cmscout/pkg/metrics"
 )
-
-func WriteChangeSetJSON(w io.Writer, set *metrics.ChangeSet) error {
-	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(set)
-}
 
 func WriteChangeSetText(w io.Writer, set *metrics.ChangeSet) error {
 	output := bufio.NewWriter(w)
