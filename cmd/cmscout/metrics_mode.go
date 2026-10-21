@@ -5,7 +5,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 )
 
 func (mf metrics_flags) input_mode(paths []string, cf compareFlags) (string, error) {
@@ -29,10 +28,8 @@ func (mf metrics_flags) input_mode(paths []string, cf compareFlags) (string, err
 	if len(paths) == 2 || cf.oldName != "" || cf.newName != "" || cf.beforeFile != "" || cf.afterFile != "" {
 		return "pair", nil
 	}
-	if len(paths) == 1 && mf.name == "" && mf.stdin_name == "" {
-		if info, err := os.Stat(paths[0]); err == nil && info.IsDir() {
-			return "scan", nil
-		}
+	if mf.selected(paths, mf.name != "" || mf.stdin_name != "") {
+		return "scan", nil
 	}
 	return "file", nil
 }
