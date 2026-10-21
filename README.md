@@ -31,6 +31,10 @@ The report gives each function a qualified name, cyclomatic complexity, source l
 Two inputs add both snapshots, touched names, metric deltas, and the semantic diff.
 See [function metrics](doc/metrics.md) for directory scans, staged and revision comparisons, counting rules, JSON fields, stdin, and a small lint rule.
 
+`cmscout --stats <file>` prints one line per block with sizes, prefix and inline comments, container method counts, and function complexity.
+It uses the same counting engine as `--metrics`, accepts `--scan` the same way, and `--max-comment-lines N` flags long comments.
+See [statistics mode](doc/stats.md) for the record format.
+
 ## When to use it
 
 Use cmscout for stable block diffs across code motion: a block moves within a file, or a rewrite reidentifies the same constructs in another language.
