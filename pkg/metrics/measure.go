@@ -27,7 +27,7 @@ func Measure(ast *parser.AST, options Options) (*Snapshot, error) {
 	fmt.Fprintf(identity, "%s\x00%s\x00%s\x00", options.Namespace, options.Path, ast.Language().Name)
 	identity.Write(ast.Source())
 	snapshot := &Snapshot{
-		SchemaVersion: "1", NamingVersion: "source-v1", Profiles: []string{"cyclomatic/source-v1", "size-comments/source-v1"},
+		SchemaVersion: "1", NamingVersion: "source-v1", Profiles: []string{"cyclomatic-v2", "size-comments-v1"},
 		SnapshotID: fmt.Sprintf("%x", identity.Sum(nil)), ContentDigest: fmt.Sprintf("%x", digest),
 		Namespace: options.Namespace, Path: options.Path, Language: ast.Language().Name,
 		Population: "functions", Coordinates: "zero-based lines and byte columns; half-open byte spans",
@@ -41,12 +41,12 @@ func Measure(ast *parser.AST, options Options) (*Snapshot, error) {
 	if inv.language == "c" || inv.language == "cpp" {
 		snapshot.Limitations = append(snapshot.Limitations,
 			"All written preprocessor alternatives are scanned; macros are not expanded.",
-			"Ordinary unevaluated operands are excluded; dynamic C array bounds are unsupported.")
+			"Unevaluated operands and C array length expressions contribute zero decisions, including VLA bounds.")
 	}
 	if inv.language == "bash" {
 		snapshot.Limitations = append(snapshot.Limitations,
-			"Legacy test -a/-o arguments, implicit set -e exits, traps and eval text are not modeled.",
-			"Case terminators add no decisions; a final unquoted wildcard case adds none.")
+			"Implicit set -e exits, traps and eval text are not modeled.",
+			"Case alternatives count up to an unquoted wildcard; case terminators add no decisions.")
 	}
 	for _, diagnostic := range ast.Diagnostics() {
 		snapshot.Diagnostics = append(snapshot.Diagnostics, Diagnostic{
@@ -68,11 +68,6 @@ func Measure(ast *parser.AST, options Options) (*Snapshot, error) {
 	snapshot.Diagnostics = append(snapshot.Diagnostics, diagnostics...)
 	for _, unit := range inv.units {
 		component := &inv.components[unit.index]
-		if component.Cyclomatic.Status != "complete" {
-			snapshot.Diagnostics = append(snapshot.Diagnostics, Diagnostic{
-				"unsupported", "C array bounds need type information to rule out variable-length evaluation", component.Span,
-			})
-		}
 		if !options.Explain {
 			component.Cyclomatic.Decisions = nil
 		}

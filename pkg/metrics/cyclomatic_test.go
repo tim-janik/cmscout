@@ -19,13 +19,13 @@ func TestCyclomatic_rules(t *testing.T) {
 		{"a.ts", `function f({a=1}={}, x=1) { let {y=2} = {}; x &&= y; x ||= y; x ??= y; return x?.a?.(y) ?? y; }`, []int{11}},
 		{"a.jsx", `function App({x}) { return <div>{x && <button onClick={() => x ? 1 : 0}/>}</div>; }`, []int{2, 2}},
 		{"a.tsx", `function App({x}) { return <div>{x && <button onClick={() => x ? 1 : 0}/>}</div>; }`, []int{2, 2}},
-		{"a.go", "package p\nfunc f(a bool, ch chan int, x any) { if a {} else if !a {} ; for {} ; for range ch {} ; switch x { case 1,2: case 3: default: }; switch x.(type) { case int,string: default: }; select {case <- ch: default:} }", []int{9}},
+		{"a.go", "package p\nfunc f(a bool, ch chan int, x any) { if a {} else if !a {} ; for {} ; for range ch {} ; switch x { case 1,2: case 3: default: }; switch x.(type) { case int,string: default: }; select {case <- ch: default:} }", []int{11}},
 		{"a.go", "package p\nfunc f(a,b bool) bool { return a && b || !a }", []int{3}},
 		{"a.c", "int f(int a) { if(a && 1){} else if(a){} for(;;){} while(a){} do{}while(a); switch(a){case 1: case 2: break; default:break;} return a ? 1:0; }", []int{10}},
 		{"a.cc", `int f(int a) { if constexpr (true) {} for(auto x : xs) {} try {} catch(...) {} return a || 1; }`, []int{5}},
-		{"a.sh", "f() { if [[ a && b ]]; then :; elif false; then :; else :; fi; true && false || :; echo ${x:-fallback}; ((x ? y : z)); case $x in a|b) :;; *) :;; esac; }", []int{9}},
+		{"a.sh", "f() { if [[ a && b ]]; then :; elif false; then :; else :; fi; true && false || :; echo ${x:-fallback}; ((x ? y : z)); case $x in a|b) :;; *) :;; esac; }", []int{10}},
 		{"a.sh", "f() { for x in a; do :; done; until false; do :; done; select x in a; do :; done; for ((x=0;x<3;x++)); do :; done; echo ${x:=a} ${x:+a} ${x:?error}; }", []int{8}},
-		{"a.sh", "f() { case $x in '*') :;; *) :;; a) :;; esac; }", []int{4}},
+		{"a.sh", "f() { case $x in '*') :;; *) :;; a) :;; esac; }", []int{3}},
 		{"a.sh", "f() { :; } >\"${x:-out}\"", []int{2}},
 		{"a.js", "function f() { const s = 'if && ?'; /* if (x) {} */ return `text ${x && y}`; }", []int{2}},
 		{"a.c", "#define F(x) ((x) ? 1 : 0)\nint f(int x) {\n#if FOO && BAR\nif(x) {}\n#else\nwhile(x) {}\n#endif\nreturn sizeof(x && 1); }", []int{3}},
@@ -89,18 +89,34 @@ func TestCyclomatic_ownership(t *testing.T) {
 	}
 }
 
-func TestCyclomatic_c_vla_is_unavailable(t *testing.T) {
+func TestCyclomatic_c_array_bounds_ignored(t *testing.T) {
 	for _, source := range []string{
-		"void f(int n) { int a[n]; }\n",
-		"int f(int n, int a[n]) { return sizeof(a); }\n",
-		"int f(int n) { return sizeof(int[n]); }\n",
+		"void f(int n) { int a[n ? 4 : 8]; if (n) {} }",
+		"int f(int n, int a[n && n ? 4 : 8]) { if (n) {} return sizeof(a); }",
+		"int f(int n) { if (n) {} return sizeof(int[n ? 4 : 8]); }",
+		"void f(int n) { int a[n][n ? 4 : 8]; if (n) {} }",
+		"void f(int n) { int (*a)[n ? 4 : 8] = n ? 0 : 0; }",
 	} {
-		ast := source_tree(t, "a.c", source)
-		inv := discover(ast, Options{Namespace: "test", Path: "a.c"})
-		inv.count_complexity(ast.RootNode())
-		metric := inv.components[inv.units[0].index].Cyclomatic
-		if metric.Value != nil || metric.Status != "unsupported" {
-			t.Fatalf("VLA counted as supported: %+v", metric)
+		ast := source_tree(t, "a.c", source+"\nint surrounding(void) { return 0; }")
+		snapshot, err := Measure(ast, Options{Namespace: "test", Path: "a.c", Explain: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if snapshot.Status != "complete" || len(snapshot.Diagnostics) != 0 {
+			t.Fatalf("incomplete: %+v", snapshot)
+		}
+		var got []int
+		for _, c := range snapshot.Components {
+			if c.FunctionMetrics == nil {
+				continue
+			}
+			if c.Cyclomatic.Value == nil || c.Cyclomatic.Status != "complete" {
+				t.Fatalf("unavailable: %+v", c)
+			}
+			got = append(got, *c.Cyclomatic.Value)
+		}
+		if !reflect.DeepEqual(got, []int{2, 1}) {
+			t.Fatalf("scores=%v source=%s", got, source)
 		}
 	}
 }

@@ -84,7 +84,11 @@ records also expose their corresponding entries for convenience.
 
 ## Counting profile
 
-JSON schema `1` records `cyclomatic/source-v1` and `size-comments/source-v1`.
+JSON schema `1` records `cyclomatic-v2` and `size-comments-v1`. Version 2
+counts Go case values and Bash pattern alternatives separately, uses clauses
+minus one for Go select, recognizes C++ alternative operators and Bash test
+operators, excludes static assertions, and skips C array length expressions.
+Scores from different profile versions must not be compared as metric deltas.
 These profiles describe source syntax. They do not build a control-flow graph,
 resolve types, fold constants, or establish how many tests prove correctness.
 
@@ -99,9 +103,11 @@ Complexity starts at 1. Each owned decision adds 1:
 | JS/TS optional access or call | One per `?.` segment. |
 | JS/TS parameter and destructuring defaults | One per default, plus decisions in its expression. |
 | C/C++/JS/TS switch | One per non-default label, including stacked labels. |
-| Go switch and select | One per non-default clause; several case values count once. |
+| Go switch | One per non-default case value or type, including comma-separated lists. |
+| Go select | Number of communication and default clauses minus one, with a minimum of zero. |
 | JS/TS/C++ catch | One per handler. |
-| Bash case | One per item; a final unquoted `*` item adds none. |
+| Bash case | One per pattern alternative before an unquoted `*` in that item. |
+| C++ `and`, `or`; Bash test `-a`, `-o` | One per operator. |
 | Bash parameter alternatives | One per `-`, `:-`, `=`, `:=`, `+`, `:+`, `?`, or `:?` operator. |
 
 Returns, breaks, ordinary calls, arithmetic, comparisons, and bitwise operators
@@ -117,13 +123,13 @@ to the constructor. Bash function redirects belong to the function.
 The C/C++ profile scans ordinary source in every written preprocessor branch.
 It skips directive conditions and macro bodies. It counts `if constexpr` once
 and visits both branches. Ordinary `sizeof`, `alignof`, `decltype`, `noexcept`,
-and `requires` operands add no outer decisions. Separately defined callable
-bodies still have their own source scores. Dynamic C array bounds are currently
-unsupported and produce an incomplete report, including bounds that might be
-constant after macro expansion or type checking.
+and `requires` operands, C `_Static_assert`, and C++ `static_assert` add no
+outer decisions. Separately defined callable bodies still have their own source
+scores. C array length expressions, including VLA bounds, contribute zero
+decisions; the rest of the function stays scorable.
 
-The Bash profile excludes legacy test arguments `-a` and `-o`, implicit `set -e`
-exits, traps, and text passed to `eval`. Case terminators add no decisions.
+The Bash profile counts legacy test operators `-a` and `-o`. It excludes implicit
+`set -e` exits, traps, and text passed to `eval`. Case terminators add no decisions.
 These limits are also included in each relevant report.
 
 ## Sizes and comments
