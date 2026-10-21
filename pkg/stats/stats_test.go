@@ -366,7 +366,7 @@ func TestAnalyze_method_owners(t *testing.T) {
 
 func TestAnalyze_shared_prefix_has_one_owner(t *testing.T) {
 	r := analyze_source(t, "js", ".js", "p.js", "// doc\nconst a = () => 0, b = () => 1;\n", Options{})
-	if a, b := find_block(r, "a"), find_block(r, "b"); a == nil || b == nil || a.PrefixLines != 1 || b.PrefixLines != 0 {
+	if a, b := find_block(r, "a"), find_block(r, "b"); r.Status != "complete" || a == nil || b == nil || a.PrefixLines != 1 || b.PrefixLines != 0 {
 		t.Fatalf("one prefix comment claimed by several blocks: %+v", r.Blocks)
 	}
 }

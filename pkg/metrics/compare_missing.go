@@ -22,7 +22,7 @@ func compare_missing(before, after *Snapshot) *Comparison {
 		new_source = after.source
 	}
 	result.BeforeRanges, result.AfterRanges, _ = changed_ranges(old_source, new_source)
-	inventory_trusted := snapshot.inventory_trusted()
+	inventory_trusted := snapshot.Status == "complete"
 	for i := range snapshot.Components {
 		component := &snapshot.Components[i]
 		change := Change{DirectChanged: true, BeforeRanges: []Span{}, AfterRanges: []Span{}}

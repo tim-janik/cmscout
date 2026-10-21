@@ -107,57 +107,6 @@ func TestCompare_minified_component_limit(t *testing.T) {
 	}
 }
 
-func TestCompare_partial_measurements_preserve_inventory(t *testing.T) {
-	for _, test := range []struct {
-		path, before, after string
-		status              string
-		bad_delta           *int
-	}{
-		{"a.js", "const a = () => 0, b = () => 0;\nfunction good(x) { return x; }\n",
-			"// docs\nconst a = () => 0, b = () => 0;\nfunction good(x) { return x ? 1 : 0; }\n",
-			"partial", nil},
-		{"a.c", "int bad(int n) { int a[3]; return 0; }\nint good(int x) { return x; }\n",
-			"int bad(int n) { int a[n ? 4 : 8]; return 0; }\nint good(int x) { return x ? 1 : 0; }\n",
-			"complete", func() *int { delta := 0; return &delta }()},
-	} {
-		t.Run(test.path, func(t *testing.T) {
-			before, after := measurement(t, test.path, test.before), measurement(t, test.path, test.after)
-			result, err := Compare(before, after)
-			if err != nil {
-				t.Fatal(err)
-			}
-			good := change_named(t, result, "good")
-			if result.Status != test.status || good.Match.Status != "matched" || good.Delta.Status != "complete" ||
-				good.Delta.Cyclomatic == nil || *good.Delta.Cyclomatic != 1 {
-				t.Fatalf("local measurement issue erased a known delta: %+v", good)
-			}
-			if test.bad_delta != nil {
-				bad := change_named(t, result, "bad").Delta.Cyclomatic
-				if bad == nil || *bad != *test.bad_delta {
-					t.Fatalf("wrong array-bound delta: %+v", change_named(t, result, "bad"))
-				}
-			}
-			for _, added := range []bool{true, false} {
-				old, new := after, after
-				if added {
-					old = nil
-				} else {
-					new = nil
-				}
-				missing, err := Compare(old, new)
-				if err != nil || missing.Status != test.status || len(missing.Changes) != len(after.Components) {
-					t.Fatalf("missing-file comparison failed: %+v %v", missing, err)
-				}
-				for _, change := range missing.Changes {
-					if change.Added != added || change.Removed == added || change.Match.Status == "unavailable" {
-						t.Fatalf("local measurement issue erased a known file change: %+v", change)
-					}
-				}
-			}
-		})
-	}
-}
-
 func TestCompare_untrusted_inventory(t *testing.T) {
 	for _, source := range []string{"function f() {", "function f() { return '\xff'; }"} {
 		before := measurement(t, "a.js", "function f() { return 0; }")

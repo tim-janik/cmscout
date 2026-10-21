@@ -63,17 +63,12 @@ func Measure(ast *parser.AST, options Options) (*Snapshot, error) {
 		return snapshot, nil
 	}
 	inv.count_complexity(ast.RootNode())
-	comments, diagnostics := inv.measure_comments(index)
-	snapshot.Comments = comments
-	snapshot.Diagnostics = append(snapshot.Diagnostics, diagnostics...)
+	snapshot.Comments = inv.measure_comments(index)
 	for _, unit := range inv.units {
 		component := &inv.components[unit.index]
 		if !options.Explain {
 			component.Cyclomatic.Decisions = nil
 		}
-	}
-	if len(snapshot.Diagnostics) > 0 {
-		snapshot.Status = "partial"
 	}
 	return snapshot, nil
 }

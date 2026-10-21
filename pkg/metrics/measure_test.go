@@ -136,15 +136,12 @@ func TestComments_boundaries(t *testing.T) {
 	}
 }
 
-func TestComments_ambiguous_and_directives(t *testing.T) {
+func TestComments_shared_prefix_and_directives(t *testing.T) {
 	snapshot := measurement(t, "a.js", "// which one?\nconst a = () => 1, b = () => 2;\n")
-	if snapshot.Status != "partial" || len(snapshot.Comments) != 1 || snapshot.Comments[0].Ownership != "ambiguous" {
-		t.Fatalf("ambiguous prefix was silently assigned: %+v", snapshot)
-	}
-	for _, function := range functions_by_name(snapshot) {
-		if function.PrefixComment != nil || function.CommentStatus != "ambiguous" || function.Cyclomatic.Value == nil {
-			t.Fatalf("wrong ambiguous record: %+v", function)
-		}
+	functions := functions_by_name(snapshot)
+	if snapshot.Status != "complete" || len(snapshot.Comments) != 1 || snapshot.Comments[0].OwnerName != functions["a"].QualifiedName ||
+		functions["a"].PrefixComment == nil || functions["a"].PrefixComment.Lines != 1 || functions["b"].PrefixComment.Lines != 0 {
+		t.Fatalf("shared prefix not owned by the first declarator: %+v", snapshot)
 	}
 	for _, test := range []struct{ path, source string }{
 		{"a.sh", "#!/bin/bash\nf() { cat <<'EOF'\n# not a comment\nEOF\n}\n"},

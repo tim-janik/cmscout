@@ -78,8 +78,8 @@ their text. Adding the sizes of nested functions would therefore count some text
 twice. This release measures the function population. It does not claim complete
 file execution, class totals, or application totals.
 
-The top-level `comments` array retains comments outside functions, directives,
-and ambiguous prefixes. It contains each owned comment range once; function
+The top-level `comments` array retains comments outside functions and
+directives. It contains each owned comment range once; function
 records also expose their corresponding entries for convenience.
 
 ## Counting profile
@@ -156,9 +156,8 @@ body. Its internal comments also belong to the child. Shebangs and recognized
 Go, TypeScript, and shellcheck directives are retained as directives. They do not
 count as function documentation.
 
-A prefix above several callable declarators is ambiguous. The report retains
-its range with `ownership: "ambiguous"`; the affected functions have a null
-prefix and `comment_status: "ambiguous"`.
+A prefix above several declarators of one declaration, as in
+`const a = () => 0, b = () => 1;`, belongs to the first declarator.
 
 ## Names and source context
 
@@ -283,10 +282,9 @@ lines and characters, prefix size, total inline-comment characters, and inline
 comment count. Inline arrays stay intact in both snapshots; entries are never
 subtracted by their array position. A missing side is null, with no invented
 zero score. Cross-language or different-profile deltas are `incomparable`.
-Parse or UTF-8 errors make matches and deltas `unavailable` and suppress additions
-and removals from the damaged inventory. Local comment or complexity problems
-keep valid matches, deltas, additions, and removals. Unknown metric values remain
-null. The overall report stays `partial` in both cases.
+Parse or UTF-8 errors make the report `partial`, its matches and deltas
+`unavailable`, and suppress additions and removals from the damaged inventory.
+Unknown metric values remain null.
 
 `--word-diff`, `--word-diff-span-threshold`, and `--ignore-all-space` affect only
 the rendered diff in comparison mode. They do not filter touched names or change
