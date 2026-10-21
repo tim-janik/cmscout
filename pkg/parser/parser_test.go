@@ -118,6 +118,31 @@ func TestAST_ErrorCount_ShortCircuitOnClean(t *testing.T) {
 	}
 }
 
+func TestAST_missing_token_diagnostics(t *testing.T) {
+	for _, language := range []string{"js", "ts", "tsx", "jsx", "c", "cpp"} {
+		t.Run(language, func(t *testing.T) {
+			source := "function f() {"
+			if language == "c" || language == "cpp" {
+				source = "void f() {"
+			}
+			ast := parseSrc(t, language, source)
+			diagnostics := ast.Diagnostics()
+			if ast.ErrorCount() != len(diagnostics) || len(diagnostics) == 0 {
+				t.Fatalf("missing diagnostics: %+v", diagnostics)
+			}
+			for _, diagnostic := range diagnostics {
+				if diagnostic.Kind == "missing" && diagnostic.Token == "}" {
+					if diagnostic.StartByte != uint(len(source)) || diagnostic.EndByte != diagnostic.StartByte {
+						t.Fatalf("wrong insertion span: %+v", diagnostic)
+					}
+					return
+				}
+			}
+			t.Fatalf("missing closing brace not reported: %+v", diagnostics)
+		})
+	}
+}
+
 // TestAST_ErrorCount_MissingToken: a missing token gets the kind of the token
 // it stands in for (e.g. ";"), never "MISSING"; it must still count as a parse
 // error so the report's "Parse Errors" row covers dropped semicolons.

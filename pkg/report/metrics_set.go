@@ -1,0 +1,30 @@
+// This Source Code Form is licensed MPL-2.0: http://mozilla.org/MPL/2.0
+
+package report
+
+import (
+	"bufio"
+	"fmt"
+	"io"
+
+	"cmscout/pkg/metrics"
+)
+
+func WriteChangeSetText(w io.Writer, set *metrics.ChangeSet) error {
+	output := bufio.NewWriter(w)
+	fmt.Fprintf(output, "Changed files (%s): %s -> %s, %d file pairs\n", set.Status, set.Input.Before, set.Input.After, len(set.Files))
+	fmt.Fprintln(output, "Population: changed files only")
+	for _, file := range set.Files {
+		fmt.Fprintf(output, "\nFile change: %s\n", file.Change)
+		if err := WriteComparisonText(output, file.Comparison); err != nil {
+			return err
+		}
+	}
+	for _, skipped := range set.Skipped {
+		fmt.Fprintf(output, "skipped %s: %s\n", DisplayPath(skipped.Path), DisplayPath(skipped.Message))
+	}
+	for _, diagnostic := range set.Diagnostics {
+		fmt.Fprintf(output, "%s %s: %s\n", diagnostic.Kind, DisplayPath(diagnostic.Path), DisplayPath(diagnostic.Message))
+	}
+	return output.Flush()
+}
