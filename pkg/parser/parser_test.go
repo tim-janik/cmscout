@@ -49,6 +49,24 @@ func TestAST_CleanSource(t *testing.T) {
 	}
 }
 
+// TestAST_ErrorCount_Malformed verifies that genuinely un-parseable input
+// produces tree-sitter ERROR nodes that ErrorCount can enumerate.
+//
+// IMPORTANT: tree-sitter is an error-recovering parser. Many malformed inputs
+// (e.g. an unbalanced brace) parse *without* emitting any ERROR/MISSING node:
+// the recovery eats the bad region and the root node's HasError() stays true
+// while ErrorCount returns 0. Such inputs are deliberately NOT used here. The
+// cases below are inputs known to defeat recovery for each vendored grammar,
+// so ErrorCount reliably returns > 0. This is the trigger that the earlier
+// manual attempts using "unclosed function" failed to hit.
+//
+// A non-zero count is the "don't fully trust this" signal surfaced in the
+// report's "Parse Errors" row (Issue D). A zero count is *not* a proof of
+// validity — recovery can silently swallow errors.
+//
+// Thresholds are minimums (>=), not exacts: ERROR nodes can nest, so a single
+// bad region may count as 2. Bump these only when upgrading a grammar in
+// go.mod if the new grammar recovers an input it previously rejected.
 func TestAST_ErrorCount_Malformed(t *testing.T) {
 	cases := []struct {
 		name string
@@ -125,6 +143,9 @@ func TestAST_missing_token_diagnostics(t *testing.T) {
 	}
 }
 
+// TestAST_ErrorCount_MissingToken: a missing token gets the kind of the token
+// it stands in for (e.g. ";"), never "MISSING"; it must still count as a parse
+// error so the report's "Parse Errors" row covers dropped semicolons.
 func TestAST_ErrorCount_MissingToken(t *testing.T) {
 	for _, src := range []string{
 		"int x = 1",
