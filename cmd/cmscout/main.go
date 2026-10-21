@@ -340,23 +340,23 @@ Usage:
   (only one side may be stdin).
 
 Flags:
-  --stats                Report single-file block sizes, comments, methods and complexity
-  --max-comment-lines N  In --stats, flag long comments (default 5; 0 disables)
-  --metrics              Measure one file, or compare metrics and diff two files
-  --format text|json     Metrics output format (default: text)
-  --explain              Include each complexity decision and its location
-  --root <dir>           Root for qualified names (default: infer from source path)
-  --name <file>          Logical name for a single metrics input
-  --stdin-name <file>    Logical filename for metrics read from '-'
-  --scan                Scan files and directories (default: current directory)
-  --staged              Compare HEAD with the index
-  --worktree            Compare the index with tracked working files
-  --revision <commit>   Compare a commit with its parent
-  --parent <number>     Choose a parent of --revision (required for merges)
-  --base <commit>       Compare --revision against this commit instead
-  --include <glob>      Include root-relative scan paths, repeatable; ** spans dirs
-  --exclude <glob>      Exclude root-relative scan paths, repeatable
-  --version              Show version
+  --stats                 Report single-file block sizes, comments, methods and complexity
+  --max-comment-lines N   In --stats, flag long comments (default 5; 0 disables)
+  --metrics               Measure one file, or compare metrics and diff two files
+  --format text|json      Metrics output format (default: text)
+  --explain               Include each complexity decision and its location
+  --root <dir>            Root for qualified names (default: infer from source path)
+  --name <file>           Logical name for a single metrics input
+  --stdin-name <file>     Logical filename for metrics read from '-'
+  --scan                  Scan files and directories (default: current directory)
+  --staged                Compare HEAD with the index
+  --worktree              Compare the index with tracked working files
+  --revision <commit>     Compare a commit with its parent
+  --parent <number>       Choose a parent of --revision (required for merges)
+  --base <commit>         Compare --revision against this commit instead
+  --include <glob>        Include root-relative scan paths, repeatable; ** spans dirs
+  --exclude <glob>        Exclude root-relative scan paths, repeatable
+  --version               Show version
   --simple-diff           Skip semantic analysis: plain whole-file line diff
   --no-color              Disable ANSI colors
   --summary               Show only summary statistics
