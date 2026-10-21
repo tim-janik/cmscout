@@ -208,7 +208,8 @@ Exit 0 means complete analysis. Exit 2 means an input error, incomplete required
 analysis, or unresolved matching ambiguity. A partial report is still emitted
 in the requested format, with
 diagnostics. JSON stdout contains only that document. Existing diff errors keep
-exit 1. Reports are informational; no complexity threshold is imposed by default.
+exit 1, and so does an invalid flag before `--metrics`, because flag parsing
+stops before the mode is known. Reports are informational; no complexity threshold is imposed by default.
 
 ## Compare two files
 

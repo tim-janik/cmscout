@@ -11,7 +11,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"cmscout/pkg/analysis"
@@ -24,6 +23,7 @@ import (
 
 type metrics_flags struct {
 	scan_flags
+	flags      *flag.FlagSet
 	enabled    bool
 	format     string
 	name       string
@@ -36,44 +36,21 @@ type metrics_flags struct {
 	parent     int
 }
 
+// register also keeps the metrics flags in their own set, so callers can reject them outside --metrics.
 func (mf *metrics_flags) register(fs *flag.FlagSet) {
-	fs.BoolVar(&mf.enabled, "metrics", false, "measure one source file, or compare two files")
-	fs.StringVar(&mf.format, "format", "text", "metrics output format: text or json")
-	mf.scan_flags.register(fs)
-	fs.StringVar(&mf.name, "name", "", "logical name for a single metrics input")
-	fs.StringVar(&mf.stdin_name, "stdin-name", "", "logical filename and language for metrics read from stdin")
-	fs.BoolVar(&mf.explain, "explain", false, "include the decisions contributing to complexity")
-	fs.BoolVar(&mf.staged, "staged", false, "compare HEAD with the index")
-	fs.BoolVar(&mf.worktree, "worktree", false, "compare the index with tracked working files")
-	fs.StringVar(&mf.revision, "revision", "", "compare a commit with its parent or --base")
-	fs.StringVar(&mf.base, "base", "", "base commit for --revision")
-	fs.IntVar(&mf.parent, "parent", 0, "parent number for --revision, starting at 1")
-}
-
-func metrics_requested(fs *flag.FlagSet, args []string) bool {
-	requested := false
-	for i := 0; i < len(args); i++ {
-		argument := args[i]
-		if argument == "--" || argument == "-" || !strings.HasPrefix(argument, "-") {
-			break
-		}
-		name, value, assigned := strings.Cut(strings.TrimLeft(argument, "-"), "=")
-		if name == "metrics" {
-			requested = true
-			if assigned {
-				if parsed, err := strconv.ParseBool(value); err == nil {
-					requested = parsed
-				}
-			}
-		}
-		if option := fs.Lookup(name); option != nil && !assigned {
-			boolean, ok := option.Value.(interface{ IsBoolFlag() bool })
-			if !ok || !boolean.IsBoolFlag() {
-				i++
-			}
-		}
-	}
-	return requested
+	mf.flags = flag.NewFlagSet("metrics", flag.ContinueOnError)
+	mf.flags.BoolVar(&mf.enabled, "metrics", false, "measure one source file, or compare two files")
+	mf.flags.StringVar(&mf.format, "format", "text", "metrics output format: text or json")
+	mf.scan_flags.register(mf.flags)
+	mf.flags.StringVar(&mf.name, "name", "", "logical name for a single metrics input")
+	mf.flags.StringVar(&mf.stdin_name, "stdin-name", "", "logical filename and language for metrics read from stdin")
+	mf.flags.BoolVar(&mf.explain, "explain", false, "include the decisions contributing to complexity")
+	mf.flags.BoolVar(&mf.staged, "staged", false, "compare HEAD with the index")
+	mf.flags.BoolVar(&mf.worktree, "worktree", false, "compare the index with tracked working files")
+	mf.flags.StringVar(&mf.revision, "revision", "", "compare a commit with its parent or --base")
+	mf.flags.StringVar(&mf.base, "base", "", "base commit for --revision")
+	mf.flags.IntVar(&mf.parent, "parent", 0, "parent number for --revision, starting at 1")
+	mf.flags.VisitAll(func(option *flag.Flag) { fs.Var(option.Value, option.Name, option.Usage) })
 }
 
 type metrics_error struct{ cause error }

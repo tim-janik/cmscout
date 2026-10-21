@@ -89,7 +89,6 @@ func TestMetrics_errors_and_partial_output(t *testing.T) {
 		{"--metrics"}, {"--metrics", path, path, path},
 		{"--metrics", "--format=yaml", path},
 		{"--metrics", "--unknown", path}, {"--metrics", "-"},
-		{"--unknown", "--metrics", path},
 		{"--metrics", "--stdin-name=a.js", path}, {"--metrics", "--summary", path},
 		{"--metrics", "--simple-diff", path}, {"--metrics", "--root", path, path},
 		{"--metrics", filepath.Join(directory, "missing.js")},
@@ -111,6 +110,23 @@ func TestMetrics_errors_and_partial_output(t *testing.T) {
 		if component.FunctionMetrics != nil && component.Cyclomatic.Value != nil {
 			t.Fatal("parse error produced a trusted score")
 		}
+	}
+}
+
+func TestMetrics_flags_require_metrics_mode(t *testing.T) {
+	path := writeFile(t, t.TempDir(), "a.js", "function f() {}")
+	for _, arguments := range [][]string{
+		{"--format=json", path, path}, {"--explain", path, path}, {"--include=*.js", path, path},
+		{"--unknown", "--metrics", path},
+	} {
+		err := run(arguments, nil, io.Discard, io.Discard)
+		if exit_code(err) != 1 {
+			t.Errorf("%v: error=%v code=%d", arguments, err, exit_code(err))
+		}
+	}
+	err := run([]string{"--staged", path, path}, nil, io.Discard, io.Discard)
+	if err == nil || err.Error() != "--staged requires --metrics" {
+		t.Fatalf("metrics flag accepted in diff mode: %v", err)
 	}
 }
 
