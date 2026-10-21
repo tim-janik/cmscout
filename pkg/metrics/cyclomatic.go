@@ -17,11 +17,7 @@ func (inv *inventory) count_complexity(root *tree_sitter.Node) {
 }
 
 func (inv *inventory) count_node(node *tree_sitter.Node, owner int) {
-	if owner >= 0 && inv.language == "c" && node.Kind() == "sizeof_expression" && dynamic_array(node) {
-		inv.unsupported_array(owner)
-	}
-	if excluded_syntax(node.Kind()) || inv.language == "cpp" && node.Kind() == "call_expression" &&
-		node_text(node.ChildByFieldName("function"), inv.source) == "noexcept" {
+	if excluded_syntax(node.Kind()) || inv.unevaluated_call(node) {
 		owner = -1
 	}
 	if index, exists := inv.nodes[node.Id()]; exists && inv.components[index].FunctionMetrics != nil {
@@ -62,8 +58,21 @@ func (inv *inventory) count_node(node *tree_sitter.Node, owner int) {
 		if strings.HasPrefix(node.Kind(), "preproc_") && node.FieldNameForChild(uint32(i)) == "condition" {
 			continue
 		}
-		inv.count_node(child, owner)
+		child_owner := owner
+		if inv.language == "c" && (node.Kind() == "array_declarator" || node.Kind() == "abstract_array_declarator") &&
+			node.FieldNameForChild(uint32(i)) == "size" {
+			child_owner = -1
+		}
+		inv.count_node(child, child_owner)
 	}
+}
+
+func (inv *inventory) unevaluated_call(node *tree_sitter.Node) bool {
+	if node.Kind() != "call_expression" {
+		return false
+	}
+	name := node_text(node.ChildByFieldName("function"), inv.source)
+	return inv.language == "cpp" && name == "noexcept" || inv.language == "c" && (name == "_Static_assert" || name == "static_assert")
 }
 
 func excluded_syntax(kind string) bool {
@@ -71,7 +80,7 @@ func excluded_syntax(kind string) bool {
 	case "comment", "preproc_def", "preproc_function_def", "preproc_call", "preproc_include",
 		"type_annotation", "type_parameters", "type_arguments", "type_query", "type_alias_declaration", "interface_declaration",
 		"sizeof_expression", "alignof_expression", "decltype", "noexcept", "requires_expression", "requires_clause",
-		"optional_parameter_declaration":
+		"optional_parameter_declaration", "static_assert_declaration":
 		return true
 	}
 	return false
@@ -110,9 +119,20 @@ func (inv *inventory) count_decision(node *tree_sitter.Node, owner int) {
 	case "conditional_expression", "ternary_expression":
 		inv.event(owner, "ternary", token(node, "?"))
 	case "binary_expression", "augmented_assignment_expression", "list":
-		operator := token(node, "&&", "||", "??", "&&=", "||=", "??=")
-		if operator.Id() != node.Id() {
-			inv.event(owner, "short_circuit", operator)
+		for i := uint(0); i < node.ChildCount(); i++ {
+			operator := node.Child(i)
+			switch operator.Kind() {
+			case "&&", "||", "??", "&&=", "||=", "??=":
+				inv.event(owner, "short_circuit", operator)
+			case "and", "or":
+				if inv.language == "cpp" {
+					inv.event(owner, "short_circuit", operator)
+				}
+			case "test_operator":
+				if inv.language == "bash" && (node_text(operator, inv.source) == "-a" || node_text(operator, inv.source) == "-o") {
+					inv.event(owner, "short_circuit", operator)
+				}
+			}
 		}
 	case "optional_chain", "?.":
 		if inv.is_javascript() && node.ChildCount() == 0 {
@@ -126,15 +146,49 @@ func (inv *inventory) count_decision(node *tree_sitter.Node, owner int) {
 		if inv.is_javascript() && node.ChildByFieldName("value") != nil {
 			inv.event(owner, "default", token(node, "="))
 		}
-	case "switch_case", "expression_case", "type_case", "communication_case":
+	case "switch_case":
 		inv.event(owner, "case", token(node, "case"))
+	case "expression_case":
+		if values := node.ChildByFieldName("value"); values != nil {
+			for i := uint(0); i < values.NamedChildCount(); i++ {
+				value := values.NamedChild(i)
+				if !value.IsExtra() {
+					inv.event(owner, "case", value)
+				}
+			}
+		}
+	case "type_case":
+		for i := uint(0); i < node.NamedChildCount(); i++ {
+			if node.FieldNameForNamedChild(uint32(i)) == "type" {
+				inv.event(owner, "case", node.NamedChild(i))
+			}
+		}
+	case "select_statement":
+		first := true
+		for i := uint(0); i < node.NamedChildCount(); i++ {
+			child := node.NamedChild(i)
+			if child.Kind() != "communication_case" && child.Kind() != "default_case" {
+				continue
+			}
+			if !first {
+				inv.event(owner, "select", token(child, "case", "default"))
+			}
+			first = false
+		}
 	case "case_statement":
 		if inv.language != "bash" && node.ChildByFieldName("value") != nil {
 			inv.event(owner, "case", token(node, "case"))
 		}
 	case "case_item":
-		if !inv.bash_default(node) {
-			inv.event(owner, "case", node.ChildByFieldName("value"))
+		for i := uint(0); i < node.NamedChildCount(); i++ {
+			if node.FieldNameForNamedChild(uint32(i)) != "value" {
+				continue
+			}
+			value := node.NamedChild(i)
+			if node_text(value, inv.source) == "*" {
+				break
+			}
+			inv.event(owner, "case", value)
 		}
 	case "catch_clause":
 		inv.event(owner, "catch", token(node, "catch"))
@@ -145,52 +199,5 @@ func (inv *inventory) count_decision(node *tree_sitter.Node, owner int) {
 				inv.event(owner, "parameter_alternative", operator)
 			}
 		}
-	case "array_declarator", "abstract_array_declarator":
-		if inv.language == "c" {
-			size := node.ChildByFieldName("size")
-			if size != nil && size.Kind() != "number_literal" {
-				inv.unsupported_array(owner)
-			}
-		}
 	}
-}
-
-func (inv *inventory) unsupported_array(owner int) {
-	inv.components[owner].Cyclomatic.Value = nil
-	inv.components[owner].Cyclomatic.Status = "unsupported"
-}
-
-func dynamic_array(node *tree_sitter.Node) bool {
-	if node.Kind() == "array_declarator" || node.Kind() == "abstract_array_declarator" {
-		if size := node.ChildByFieldName("size"); size != nil && size.Kind() != "number_literal" {
-			return true
-		}
-	}
-	for i := uint(0); i < node.NamedChildCount(); i++ {
-		if dynamic_array(node.NamedChild(i)) {
-			return true
-		}
-	}
-	return false
-}
-
-func (inv *inventory) bash_default(node *tree_sitter.Node) bool {
-	values := 0
-	for i := uint(0); i < node.ChildCount(); i++ {
-		if node.FieldNameForChild(uint32(i)) == "value" {
-			values++
-		}
-	}
-	value := node.ChildByFieldName("value")
-	if values != 1 || value == nil || node_text(value, inv.source) != "*" {
-		return false
-	}
-	parent := node.Parent()
-	for i := uint(0); i < parent.NamedChildCount(); i++ {
-		child := parent.NamedChild(i)
-		if child.Kind() == "case_item" && child.StartByte() > node.StartByte() {
-			return false
-		}
-	}
-	return true
 }

@@ -108,11 +108,17 @@ func TestCompare_minified_component_limit(t *testing.T) {
 }
 
 func TestCompare_partial_measurements_preserve_inventory(t *testing.T) {
-	for _, test := range []struct{ path, before, after string }{
+	for _, test := range []struct {
+		path, before, after string
+		status              string
+		bad_delta           *int
+	}{
 		{"a.js", "const a = () => 0, b = () => 0;\nfunction good(x) { return x; }\n",
-			"// docs\nconst a = () => 0, b = () => 0;\nfunction good(x) { return x ? 1 : 0; }\n"},
+			"// docs\nconst a = () => 0, b = () => 0;\nfunction good(x) { return x ? 1 : 0; }\n",
+			"partial", nil},
 		{"a.c", "int bad(int n) { int a[3]; return 0; }\nint good(int x) { return x; }\n",
-			"int bad(int n) { int a[n]; return 0; }\nint good(int x) { return x ? 1 : 0; }\n"},
+			"int bad(int n) { int a[n ? 4 : 8]; return 0; }\nint good(int x) { return x ? 1 : 0; }\n",
+			"complete", func() *int { delta := 0; return &delta }()},
 	} {
 		t.Run(test.path, func(t *testing.T) {
 			before, after := measurement(t, test.path, test.before), measurement(t, test.path, test.after)
@@ -121,12 +127,15 @@ func TestCompare_partial_measurements_preserve_inventory(t *testing.T) {
 				t.Fatal(err)
 			}
 			good := change_named(t, result, "good")
-			if result.Status != "partial" || good.Match.Status != "matched" || good.Delta.Status != "complete" ||
+			if result.Status != test.status || good.Match.Status != "matched" || good.Delta.Status != "complete" ||
 				good.Delta.Cyclomatic == nil || *good.Delta.Cyclomatic != 1 {
 				t.Fatalf("local measurement issue erased a known delta: %+v", good)
 			}
-			if test.path == "a.c" && change_named(t, result, "bad").Delta.Cyclomatic != nil {
-				t.Fatal("unsupported complexity acquired a numeric delta")
+			if test.bad_delta != nil {
+				bad := change_named(t, result, "bad").Delta.Cyclomatic
+				if bad == nil || *bad != *test.bad_delta {
+					t.Fatalf("wrong array-bound delta: %+v", change_named(t, result, "bad"))
+				}
 			}
 			for _, added := range []bool{true, false} {
 				old, new := after, after
@@ -136,7 +145,7 @@ func TestCompare_partial_measurements_preserve_inventory(t *testing.T) {
 					new = nil
 				}
 				missing, err := Compare(old, new)
-				if err != nil || missing.Status != "partial" || len(missing.Changes) != len(after.Components) {
+				if err != nil || missing.Status != test.status || len(missing.Changes) != len(after.Components) {
 					t.Fatalf("missing-file comparison failed: %+v %v", missing, err)
 				}
 				for _, change := range missing.Changes {
