@@ -43,7 +43,7 @@ func function_stats(doc *ir.SemanticDocument, ast *parser.AST) (*ir.SemanticDocu
 	}
 	types := make(map[string]string)
 	for _, b := range copy_doc.Blocks {
-		if b.Parent == "" && isContainerKind(b.Kind) {
+		if b.Parent == "" && is_container_kind(b.Kind) {
 			types[b.Name] = b.ID
 		}
 	}
@@ -56,7 +56,7 @@ func function_stats(doc *ir.SemanticDocument, ast *parser.AST) (*ir.SemanticDocu
 				if current.Id() != node.Id() && !callable_wrapper(current.Kind()) {
 					break
 				}
-				if i, ok := blocks[byte_span{current.StartByte(), current.EndByte()}]; ok && isFunctionLike(copy_doc.Blocks[i].Kind) {
+				if i, ok := blocks[byte_span{current.StartByte(), current.EndByte()}]; ok && is_function_like(copy_doc.Blocks[i].Kind) {
 					index = i
 					break
 				}

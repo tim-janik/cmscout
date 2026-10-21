@@ -64,9 +64,9 @@ type Report struct {
 	Comments    []Comment    // file-level comments (not inside any block, not prefixes), in source order
 }
 
-// isFunctionLike reports whether a kind counts as a function-like block that
+// is_function_like reports whether a kind counts as a function-like block that
 // owns enclosed comments and receives a branch count.
-func isFunctionLike(k ir.BlockKind) bool {
+func is_function_like(k ir.BlockKind) bool {
 	switch k {
 	case ir.KindFunction, ir.KindMethod, ir.KindObjectMethod, ir.KindLifecycle,
 		ir.KindArrowFunc, ir.KindLambda, ir.KindMacroFunction:
@@ -76,9 +76,9 @@ func isFunctionLike(k ir.BlockKind) bool {
 	}
 }
 
-// isContainerKind reports whether a kind participates in qualified names
+// is_container_kind reports whether a kind participates in qualified names
 // (an ancestor scope of nested blocks).
-func isContainerKind(k ir.BlockKind) bool {
+func is_container_kind(k ir.BlockKind) bool {
 	switch k {
 	case ir.KindClass, ir.KindInterface, ir.KindEnum, ir.KindNamespace:
 		return true
@@ -87,8 +87,8 @@ func isContainerKind(k ir.BlockKind) bool {
 	}
 }
 
-// isMethodKind reports whether a block counts as a method-like child of a class.
-func isMethodKind(k ir.BlockKind) bool {
+// is_method_kind reports whether a block counts as a method-like child of a class.
+func is_method_kind(k ir.BlockKind) bool {
 	switch k {
 	case ir.KindMethod, ir.KindObjectMethod, ir.KindLifecycle, ir.KindFunction,
 		ir.KindArrowFunc, ir.KindLambda, ir.KindMacroFunction:
@@ -98,9 +98,9 @@ func isMethodKind(k ir.BlockKind) bool {
 	}
 }
 
-// showsMethodCount reports whether a block kind renders a method count
+// shows_method_count reports whether a block kind renders a method count
 // (classes, interfaces, and namespaces own method-like children).
-func showsMethodCount(k ir.BlockKind) bool {
+func shows_method_count(k ir.BlockKind) bool {
 	switch k {
 	case ir.KindClass, ir.KindInterface, ir.KindNamespace:
 		return true
@@ -125,9 +125,9 @@ func Analyze(doc *ir.SemanticDocument, ast *parser.AST, opts Options) (*Report, 
 	}
 	src := ast.Source()
 
-	byID := make(map[string]*ir.SemanticBlock, len(doc.Blocks))
+	by_id := make(map[string]*ir.SemanticBlock, len(doc.Blocks))
 	for i := range doc.Blocks {
-		byID[doc.Blocks[i].ID] = &doc.Blocks[i]
+		by_id[doc.Blocks[i].ID] = &doc.Blocks[i]
 	}
 
 	// Source-ordered block list for prefix/inline-ownership scans.
@@ -152,14 +152,14 @@ func Analyze(doc *ir.SemanticDocument, ast *parser.AST, opts Options) (*Report, 
 	// Prefixed comments: comment blocks that form the doc-comment prefix run of
 	// a following block; they are excluded from inline ownership.
 	prefixed := make(map[*ir.SemanticBlock]*ir.SemanticBlock) // comment -> block it prefixes
-	prefixRuns := make(map[*ir.SemanticBlock][]*ir.SemanticBlock)
+	prefix_runs := make(map[*ir.SemanticBlock][]*ir.SemanticBlock)
 	for _, b := range all {
 		if b.Kind == ir.KindComment {
 			continue
 		}
-		run := prefixRun(b, comments, src)
+		run := prefix_run(b, comments, src)
 		if len(run) > 0 && prefixed[run[0]] == nil {
-			prefixRuns[b] = run
+			prefix_runs[b] = run
 			for _, c := range run {
 				prefixed[c] = b
 			}
@@ -168,13 +168,13 @@ func Analyze(doc *ir.SemanticDocument, ast *parser.AST, opts Options) (*Report, 
 
 	// Owned comments: for each non-prefix comment, the deepest block containing it.
 	owned := make(map[*ir.SemanticBlock][]*ir.SemanticBlock) // block -> contained comments
-	var fileLevelComments []*ir.SemanticBlock
+	var file_level_comments []*ir.SemanticBlock
 	for _, c := range comments {
-		if _, isPrefix := prefixed[c]; isPrefix {
+		if _, is_prefix := prefixed[c]; is_prefix {
 			continue
 		}
 		var owner *ir.SemanticBlock
-		ownerSize := ^uint(0)
+		owner_size := ^uint(0)
 		for _, b := range all {
 			if b.Kind == ir.KindComment {
 				continue
@@ -185,20 +185,20 @@ func Analyze(doc *ir.SemanticDocument, ast *parser.AST, opts Options) (*Report, 
 			if c.Span.StartByte < b.Span.StartByte || c.Span.EndByte > b.Span.EndByte {
 				continue
 			}
-			if size := b.Span.EndByte - b.Span.StartByte; size < ownerSize {
+			if size := b.Span.EndByte - b.Span.StartByte; size < owner_size {
 				owner = b
-				ownerSize = size
+				owner_size = size
 			}
 		}
 		if owner == nil {
-			fileLevelComments = append(fileLevelComments, c)
+			file_level_comments = append(file_level_comments, c)
 		} else {
 			owned[owner] = append(owned[owner], c)
 		}
 	}
 
 	// Per-block child counts (methods for containers) and qualified names.
-	methodCounts := make(map[string]int)
+	method_counts := make(map[string]int)
 	qualified := make(map[string]string, len(all))
 	sep := "."
 	if doc.Language == "c" || doc.Language == "cpp" {
@@ -206,11 +206,11 @@ func Analyze(doc *ir.SemanticDocument, ast *parser.AST, opts Options) (*Report, 
 	}
 	for _, b := range all {
 		// A C++ member defined outside its class repeats a declaration inside it.
-		if parent := byID[b.Parent]; parent != nil && isMethodKind(b.Kind) &&
+		if parent := by_id[b.Parent]; parent != nil && is_method_kind(b.Kind) &&
 			(doc.Language == "go" || parent.Span.StartByte <= b.Span.StartByte && b.Span.EndByte <= parent.Span.EndByte) {
-			methodCounts[b.Parent]++
+			method_counts[b.Parent]++
 		}
-		qualified[b.ID] = qualifiedName(b, byID, sep)
+		qualified[b.ID] = qualified_name(b, by_id, sep)
 	}
 
 	report := &Report{
@@ -220,7 +220,7 @@ func Analyze(doc *ir.SemanticDocument, ast *parser.AST, opts Options) (*Report, 
 		Status:      snapshot.Status,
 		Diagnostics: snapshot.Diagnostics,
 		Blocks:      make([]BlockStats, 0, len(all)),
-		Comments:    make([]Comment, 0, len(fileLevelComments)),
+		Comments:    make([]Comment, 0, len(file_level_comments)),
 	}
 	for _, b := range all {
 		if b.Kind == ir.KindComment {
@@ -235,54 +235,54 @@ func Analyze(doc *ir.SemanticDocument, ast *parser.AST, opts Options) (*Report, 
 			EndLine:        int(b.Span.EndLine) + 1,
 			Lines:          int(b.Span.EndLine-b.Span.StartLine) + 1,
 			Chars:          utf8.RuneCountInString(b.Source),
-			Methods:        methodCounts[b.ID],
+			Methods:        method_counts[b.ID],
 			PrefixComments: make([]Comment, 0),
 			Comments:       make([]Comment, 0),
 		}
-		if run := prefixRuns[b]; len(run) > 0 {
+		if run := prefix_runs[b]; len(run) > 0 {
 			for _, c := range run {
 				bs.PrefixLines += int(c.Span.EndLine-c.Span.StartLine) + 1
 				bs.PrefixChars += utf8.RuneCountInString(c.Source)
-				bs.PrefixComments = append(bs.PrefixComments, commentStats(c, "", qualified[b.ID], opts.MaxCommentLines))
+				bs.PrefixComments = append(bs.PrefixComments, comment_stats(c, "", qualified[b.ID], opts.MaxCommentLines))
 			}
 		}
 		for _, c := range owned[b] {
-			bs.Comments = append(bs.Comments, commentStats(c, qualified[b.ID], "", opts.MaxCommentLines))
+			bs.Comments = append(bs.Comments, comment_stats(c, qualified[b.ID], "", opts.MaxCommentLines))
 		}
-		if isFunctionLike(b.Kind) {
+		if is_function_like(b.Kind) {
 			bs.Complexity = complexities[b.ID]
 			bs.Branches = max(0, bs.Complexity-1)
 		}
 		report.Blocks = append(report.Blocks, bs)
 	}
-	for _, c := range fileLevelComments {
-		report.Comments = append(report.Comments, commentStats(c, "", "", opts.MaxCommentLines))
+	for _, c := range file_level_comments {
+		report.Comments = append(report.Comments, comment_stats(c, "", "", opts.MaxCommentLines))
 	}
 	return report, nil
 }
 
-// commentStats builds the Comment record for a comment block.
-func commentStats(c *ir.SemanticBlock, owner, prefixOf string, maxLines int) Comment {
+// comment_stats builds the Comment record for a comment block.
+func comment_stats(c *ir.SemanticBlock, owner, prefix_of string, max_lines int) Comment {
 	cm := Comment{
 		StartLine: int(c.Span.StartLine) + 1,
 		EndLine:   int(c.Span.EndLine) + 1,
 		Lines:     int(c.Span.EndLine-c.Span.StartLine) + 1,
 		Chars:     utf8.RuneCountInString(c.Source),
 		Owner:     owner,
-		PrefixOf:  prefixOf,
+		PrefixOf:  prefix_of,
 	}
-	if maxLines > 0 && cm.Lines > maxLines {
+	if max_lines > 0 && cm.Lines > max_lines {
 		cm.ExceedsLimit = true
 	}
 	return cm
 }
 
-// prefixRun returns the maximal doc-comment run directly before block b: own-line
+// prefix_run returns the maximal doc-comment run directly before block b: own-line
 // comment blocks with no blank line between them or between the run and the block.
 // The comment run must end on the line directly above the block (EndLine+1 ==
 // StartLine) and each member must be an own-line comment, so a trailing comment
 // on the line above never counts as a prefix.
-func prefixRun(b *ir.SemanticBlock, comments []*ir.SemanticBlock, src []byte) []*ir.SemanticBlock {
+func prefix_run(b *ir.SemanticBlock, comments []*ir.SemanticBlock, src []byte) []*ir.SemanticBlock {
 	if len(comments) == 0 {
 		return nil
 	}
@@ -296,7 +296,7 @@ func prefixRun(b *ir.SemanticBlock, comments []*ir.SemanticBlock, src []byte) []
 		if c.Span.EndLine+1 != b.Span.StartLine {
 			continue
 		}
-		if !isOwnLineComment(c, src) {
+		if !is_own_line_comment(c, src) {
 			return nil
 		}
 		last = i
@@ -308,7 +308,7 @@ func prefixRun(b *ir.SemanticBlock, comments []*ir.SemanticBlock, src []byte) []
 	run := []*ir.SemanticBlock{comments[last]}
 	for i := last - 1; i >= 0; i-- {
 		prev := comments[i]
-		if prev.Span.EndLine+1 != run[0].Span.StartLine || !isOwnLineComment(prev, src) {
+		if prev.Span.EndLine+1 != run[0].Span.StartLine || !is_own_line_comment(prev, src) {
 			break
 		}
 		run = append([]*ir.SemanticBlock{prev}, run...)
@@ -316,19 +316,19 @@ func prefixRun(b *ir.SemanticBlock, comments []*ir.SemanticBlock, src []byte) []
 	return run
 }
 
-// isOwnLineComment reports whether only whitespace precedes the comment on its
+// is_own_line_comment reports whether only whitespace precedes the comment on its
 // line; trailing comments ("x = 1; // note") must not attach as prefixes.
-func isOwnLineComment(c *ir.SemanticBlock, src []byte) bool {
+func is_own_line_comment(c *ir.SemanticBlock, src []byte) bool {
 	start := int(c.Span.StartByte)
 	if start <= 0 || start > len(src) {
 		return true
 	}
-	lineStart := start - 1
-	for lineStart >= 0 && src[lineStart] != '\n' {
-		lineStart--
+	line_start := start - 1
+	for line_start >= 0 && src[line_start] != '\n' {
+		line_start--
 	}
-	lineStart++
-	for i := lineStart; i < start; i++ {
+	line_start++
+	for i := line_start; i < start; i++ {
 		switch src[i] {
 		case ' ', '\t', '\r':
 		default:
@@ -338,10 +338,10 @@ func isOwnLineComment(c *ir.SemanticBlock, src []byte) bool {
 	return true
 }
 
-// qualifiedName builds the fully qualified block name: the C/C++ Scope (already
+// qualified_name builds the fully qualified block name: the C/C++ Scope (already
 // stamped by the extractor) joined with the name, otherwise the enclosing
 // container names joined with the language separator.
-func qualifiedName(b *ir.SemanticBlock, byID map[string]*ir.SemanticBlock, sep string) string {
+func qualified_name(b *ir.SemanticBlock, by_id map[string]*ir.SemanticBlock, sep string) string {
 	if b.Scope != "" {
 		return b.Scope + "::" + b.Name
 	}
@@ -350,11 +350,11 @@ func qualifiedName(b *ir.SemanticBlock, byID map[string]*ir.SemanticBlock, sep s
 		if cur.Parent == "" {
 			break
 		}
-		parent, ok := byID[cur.Parent]
+		parent, ok := by_id[cur.Parent]
 		if !ok || parent == cur {
 			break
 		}
-		if (isContainerKind(parent.Kind) || isFunctionLike(parent.Kind)) && parent.Name != "" {
+		if (is_container_kind(parent.Kind) || is_function_like(parent.Kind)) && parent.Name != "" {
 			parts = append([]string{parent.Name}, parts...)
 		}
 		cur = parent

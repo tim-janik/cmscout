@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestRunStatsMode(t *testing.T) {
+func TestStats_single_file(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	src := "/// doc for foo\nfunction foo() {\n  // note\n  if (a) { b(); }\n}\n"
 	err := run([]string{"--stats", "--old", "demo.ts", "-"}, strings.NewReader(src), &stdout, &stderr)
@@ -30,7 +30,7 @@ func TestRunStatsMode(t *testing.T) {
 	}
 }
 
-func TestRunStatsModeStdinAndMaxCommentLines(t *testing.T) {
+func TestStats_stdin_and_max_comment_lines(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	src := "/* long comment\nspanning three\nlines */\nfunction foo() {}\n"
 	err := run([]string{"--stats", "--max-comment-lines", "2", "--old", "demo.ts", "-"},
@@ -44,14 +44,14 @@ func TestRunStatsModeStdinAndMaxCommentLines(t *testing.T) {
 	}
 }
 
-func TestRunStatsModeBeforeContents(t *testing.T) {
+func TestStats_before_contents(t *testing.T) {
 	dir := t.TempDir()
-	contentPath := filepath.Join(dir, "content.ts")
-	if err := os.WriteFile(contentPath, []byte("function bar() {}\n"), 0o644); err != nil {
+	content_path := filepath.Join(dir, "content.ts")
+	if err := os.WriteFile(content_path, []byte("function bar() {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	var stdout, stderr bytes.Buffer
-	err := run([]string{"--stats", "-B", contentPath, "display.ts"}, strings.NewReader(""), &stdout, &stderr)
+	err := run([]string{"--stats", "-B", content_path, "display.ts"}, strings.NewReader(""), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("run --stats -B: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestRunStatsModeBeforeContents(t *testing.T) {
 	}
 }
 
-func TestStatsIncomplete(t *testing.T) {
+func TestStats_incomplete(t *testing.T) {
 	for _, src := range []string{
 		"int good(void) { return 1; }\nint bad(void) { return @; }",
 		"int f(int x) { if(x) return 1;",
@@ -77,7 +77,7 @@ func TestStatsIncomplete(t *testing.T) {
 	}
 }
 
-func TestStatsRejectsConflictingFlags(t *testing.T) {
+func TestStats_rejects_conflicting_flags(t *testing.T) {
 	for _, args := range [][]string{
 		{"--stats", "--metrics"}, {"--stats", "--simple-diff"}, {"--stats", "--max-comment-lines", "-1"},
 		{"--stats", "--scan", "--old", "demo.c"}, {"--max-comment-lines", "5"},
@@ -90,7 +90,7 @@ func TestStatsRejectsConflictingFlags(t *testing.T) {
 	}
 }
 
-func TestRunStatsModeErrors(t *testing.T) {
+func TestStats_errors(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	// Unsupported language (real file, unknown extension).
 	dir := t.TempDir()

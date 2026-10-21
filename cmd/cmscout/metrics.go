@@ -200,7 +200,7 @@ func (mf metrics_flags) compare(cf compareFlags, paths []string, stdin io.Reader
 func render_metrics_diff(cf compareFlags, names, contents [2]string, documents [2]*ir.SemanticDocument) (*metrics.RenderedDiff, error) {
 	var rendered bytes.Buffer
 	cf.oldName, cf.newName = names[0], names[1]
-	err := runSemanticReviewDocuments(cf, report.Options{NoColor: true, IgnoreSpace: cf.ignoreSpace},
+	err := run_semantic_review_documents(cf, report.Options{NoColor: true, IgnoreSpace: cf.ignoreSpace},
 		contents[0], contents[1], documents[0], documents[1], &rendered)
 	if err != nil {
 		return nil, err
