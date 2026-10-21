@@ -17,7 +17,6 @@ import (
 	"cmscout/pkg/analysis"
 	"cmscout/pkg/extract"
 	"cmscout/pkg/ir"
-	"cmscout/pkg/lang"
 	"cmscout/pkg/metrics"
 	"cmscout/pkg/report"
 	"cmscout/pkg/source"
@@ -187,9 +186,7 @@ func (mf metrics_flags) compare(cf compareFlags, paths []string, stdin io.Reader
 	if err != nil {
 		return err
 	}
-	old_language, old_known := lang.Detect(old_options.Path)
-	new_language, new_known := lang.Detect(new_options.Path)
-	separate_macros := old_known && new_known && lang.HasMacroFunctions(old_language) && lang.HasMacroFunctions(new_language)
+	separate_macros := separate_macro_functions(old_options.Path, new_options.Path)
 	before, old_document, err := measure_for_diff(old_source, old_options, separate_macros)
 	if err != nil {
 		return fmt.Errorf("before metrics: %w", err)
@@ -203,14 +200,11 @@ func (mf metrics_flags) compare(cf compareFlags, paths []string, stdin io.Reader
 		return err
 	}
 	if comparison.RangePrecision != "unavailable" {
-		var rendered bytes.Buffer
-		cf.oldName, cf.newName = old_options.Path, new_options.Path
-		err = runSemanticReviewDocuments(cf, report.Options{NoColor: true, IgnoreSpace: cf.ignoreSpace},
-			old_source, new_source, old_document, new_document, &rendered)
+		comparison.Diff, err = render_metrics_diff(cf, [2]string{old_options.Path, new_options.Path},
+			[2]string{old_source, new_source}, [2]*ir.SemanticDocument{old_document, new_document})
 		if err != nil {
 			return err
 		}
-		comparison.Diff = &metrics.RenderedDiff{Format: "cmscout-text-v1", Text: rendered.String()}
 	}
 	if mf.format == "json" {
 		err = report.WriteComparisonJSON(stdout, comparison)
@@ -224,6 +218,17 @@ func (mf metrics_flags) compare(cf compareFlags, paths []string, stdin io.Reader
 		return fmt.Errorf("metrics comparison incomplete; see report diagnostics")
 	}
 	return nil
+}
+
+func render_metrics_diff(cf compareFlags, names, contents [2]string, documents [2]*ir.SemanticDocument) (*metrics.RenderedDiff, error) {
+	var rendered bytes.Buffer
+	cf.oldName, cf.newName = names[0], names[1]
+	err := runSemanticReviewDocuments(cf, report.Options{NoColor: true, IgnoreSpace: cf.ignoreSpace},
+		contents[0], contents[1], documents[0], documents[1], &rendered)
+	if err != nil {
+		return nil, err
+	}
+	return &metrics.RenderedDiff{Format: "cmscout-text-v1", Text: rendered.String()}, nil
 }
 
 func measure_for_diff(source string, options metrics.Options, separate_macros bool) (*metrics.Snapshot, *ir.SemanticDocument, error) {

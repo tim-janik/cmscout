@@ -143,12 +143,9 @@ func runSemanticReviewDocuments(cf compareFlags, opts report.Options,
 	})
 
 	// Detect language support first: an unsupported side falls back without being parsed.
-	oldLang, oldOK := lang.Detect(cf.oldName)
-	newLang, newOK := lang.Detect(cf.newName)
-
-	// Separate macro kinds only when both inputs are C/C++.
-	separateMacros := oldOK && newOK &&
-		lang.HasMacroFunctions(oldLang) && lang.HasMacroFunctions(newLang)
+	_, oldOK := lang.Detect(cf.oldName)
+	_, newOK := lang.Detect(cf.newName)
+	separateMacros := separate_macro_functions(cf.oldName, cf.newName)
 
 	var result *ir.CorrelationResult
 	usedFallback := false
@@ -267,6 +264,17 @@ func display_path(path string) string {
 		return path
 	}
 	return quoted
+}
+
+// separate_macro_functions separates macro kinds only when all inputs are C/C++.
+func separate_macro_functions(paths ...string) bool {
+	for _, path := range paths {
+		language, known := lang.Detect(path)
+		if !known || !lang.HasMacroFunctions(language) {
+			return false
+		}
+	}
+	return len(paths) > 0
 }
 
 func parseAndExtract(src, path string, separateMacros bool) (*ir.SemanticDocument, error) {
