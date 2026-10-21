@@ -12,6 +12,7 @@ import (
 	"cmscout/pkg/analysis"
 	"cmscout/pkg/extract"
 	"cmscout/pkg/lang"
+	"cmscout/pkg/report"
 	"cmscout/pkg/source"
 	"cmscout/pkg/stats"
 )
@@ -91,7 +92,7 @@ func scan_stats(sf scan_flags, paths []string, limit int, stdout io.Writer) erro
 		return metrics_error{err}
 	}
 	partial := len(files.Diagnostics) > 0
-	if _, err := fmt.Fprintf(stdout, "# cmscout stats scan: %s\n", files.Root); err != nil {
+	if _, err := fmt.Fprintf(stdout, "# cmscout stats scan: %s\n", report.DisplayPath(files.Root)); err != nil {
 		return err
 	}
 	for _, name := range files.Files {
@@ -105,7 +106,7 @@ func scan_stats(sf scan_flags, paths []string, limit int, stdout io.Writer) erro
 		}
 		if err != nil {
 			partial = true
-			if _, write_err := fmt.Fprintf(stdout, "# diagnostic analysis_error %s: %s\n", name, err); write_err != nil {
+			if _, write_err := fmt.Fprintf(stdout, "# diagnostic analysis_error %s: %s\n", report.DisplayPath(name), report.DisplayPath(err.Error())); write_err != nil {
 				return write_err
 			}
 			continue
@@ -118,12 +119,12 @@ func scan_stats(sf scan_flags, paths []string, limit int, stdout io.Writer) erro
 		}
 	}
 	for _, notice := range files.Skipped {
-		if _, err := fmt.Fprintf(stdout, "# skipped %s %s: %s\n", notice.Kind, notice.Path, notice.Message); err != nil {
+		if _, err := fmt.Fprintf(stdout, "# skipped %s %s: %s\n", notice.Kind, report.DisplayPath(notice.Path), report.DisplayPath(notice.Message)); err != nil {
 			return err
 		}
 	}
 	for _, notice := range files.Diagnostics {
-		if _, err := fmt.Fprintf(stdout, "# diagnostic %s %s: %s\n", notice.Kind, notice.Path, notice.Message); err != nil {
+		if _, err := fmt.Fprintf(stdout, "# diagnostic %s %s: %s\n", notice.Kind, report.DisplayPath(notice.Path), report.DisplayPath(notice.Message)); err != nil {
 			return err
 		}
 	}

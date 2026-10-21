@@ -12,7 +12,7 @@ import (
 
 func WriteScanText(w io.Writer, scan *metrics.ScanReport) error {
 	output := bufio.NewWriter(w)
-	fmt.Fprintf(output, "Source scan (%s): %d files, root %q\n", scan.Status, len(scan.Files), scan.Root)
+	fmt.Fprintf(output, "Source scan (%s): %d files, root %s\n", scan.Status, len(scan.Files), DisplayPath(scan.Root))
 	for _, snapshot := range scan.Files {
 		fmt.Fprintln(output)
 		if err := WriteMetricsText(output, snapshot); err != nil {
@@ -20,10 +20,10 @@ func WriteScanText(w io.Writer, scan *metrics.ScanReport) error {
 		}
 	}
 	for _, skipped := range scan.Skipped {
-		fmt.Fprintf(output, "skipped %q: %q\n", skipped.Path, skipped.Message)
+		fmt.Fprintf(output, "skipped %s: %s\n", DisplayPath(skipped.Path), DisplayPath(skipped.Message))
 	}
 	for _, diagnostic := range scan.Diagnostics {
-		fmt.Fprintf(output, "%s %q: %q\n", diagnostic.Kind, diagnostic.Path, diagnostic.Message)
+		fmt.Fprintf(output, "%s %s: %s\n", diagnostic.Kind, DisplayPath(diagnostic.Path), DisplayPath(diagnostic.Message))
 	}
 	return output.Flush()
 }

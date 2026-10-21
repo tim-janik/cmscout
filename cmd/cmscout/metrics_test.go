@@ -186,11 +186,20 @@ func TestMetrics_text_paths_escape_controls(t *testing.T) {
 		{"--metrics", before, after},
 		{"--metrics", "--scan", root},
 		{"--metrics", "--staged", "--root", root},
+		{"--stats", after},
+		{"--stats", "--scan", root},
 	} {
 		var stdout, stderr bytes.Buffer
 		err := run(args, nil, &stdout, &stderr)
 		if err != nil || strings.Contains(stdout.String(), "\x1b") || !strings.Contains(stdout.String(), `après\n\x1b[31m.js"`) {
 			t.Fatalf("arguments=%v error=%v output=%q", args, err, stdout.String())
+		}
+	}
+	writeFile(t, root, "note.txt", "")
+	for args, want := range map[string]string{"--metrics " + before: "\n  before.js:1:1 ", "--metrics --scan " + root: "\nskipped note.txt: "} {
+		var stdout bytes.Buffer
+		if err := run(strings.Fields(args), nil, &stdout, io.Discard); err != nil || !strings.Contains(stdout.String(), want) {
+			t.Fatalf("%s: plain path was quoted: %v %q", args, err, stdout.String())
 		}
 	}
 }

@@ -203,8 +203,8 @@ func runSemanticReviewDocuments(cf compareFlags, opts report.Options,
 	// The unknown-language fallback already is a whole-file diff and needs no supplement.
 	if !usedFallback {
 		result.Pairs = append(result.Pairs, ir.CorrelatedPair{
-			Old:          &ir.SemanticBlock{Source: oldSrc, Kind: ir.KindUnknown, Name: display_path(cf.oldName)},
-			New:          &ir.SemanticBlock{Source: newSrc, Kind: ir.KindUnknown, Name: display_path(cf.newName)},
+			Old:          &ir.SemanticBlock{Source: oldSrc, Kind: ir.KindUnknown, Name: report.DisplayPath(cf.oldName)},
+			New:          &ir.SemanticBlock{Source: newSrc, Kind: ir.KindUnknown, Name: report.DisplayPath(cf.newName)},
 			InnerDiff:    d.Diff(oldSrc, newSrc),
 			Confidence:   1.0,
 			MatchType:    ir.MatchSimilarity,
@@ -231,8 +231,8 @@ func synthesizeFallbackDiff(oldSrc, newSrc, oldName, newName string, d *diff.Dif
 	whole := d.Diff(oldSrc, newSrc)
 	return &ir.CorrelationResult{
 		Pairs: []ir.CorrelatedPair{{
-			Old:        &ir.SemanticBlock{Source: oldSrc, Kind: ir.KindUnknown, Name: display_path(oldName)},
-			New:        &ir.SemanticBlock{Source: newSrc, Kind: ir.KindUnknown, Name: display_path(newName)},
+			Old:        &ir.SemanticBlock{Source: oldSrc, Kind: ir.KindUnknown, Name: report.DisplayPath(oldName)},
+			New:        &ir.SemanticBlock{Source: newSrc, Kind: ir.KindUnknown, Name: report.DisplayPath(newName)},
 			InnerDiff:  whole,
 			Confidence: 1.0,
 			MatchType:  ir.MatchSimilarity,
@@ -250,18 +250,10 @@ func writeReport(stdout io.Writer, opts report.Options, result *ir.CorrelationRe
 		opts.NewLanguage = newLang.Name
 	}
 	r := &report.TextReporter{Opts: opts}
-	if _, err := fmt.Fprintf(stdout, "diff --cmscout %s %s\n", display_path(oldName), display_path(newName)); err != nil {
+	if _, err := fmt.Fprintf(stdout, "diff --cmscout %s %s\n", report.DisplayPath(oldName), report.DisplayPath(newName)); err != nil {
 		return err
 	}
 	return r.Write(stdout, result)
-}
-
-func display_path(path string) string {
-	quoted := fmt.Sprintf("%q", path)
-	if quoted[1:len(quoted)-1] == path {
-		return path
-	}
-	return quoted
 }
 
 // separate_macro_functions separates macro kinds only when all inputs are C/C++.
