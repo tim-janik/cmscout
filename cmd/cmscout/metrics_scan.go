@@ -52,7 +52,7 @@ func (mf metrics_flags) scan_files(paths []string, stdout io.Writer) error {
 		result.Status = "partial"
 	}
 	if mf.format == "json" {
-		err = report.WriteScanJSON(stdout, result)
+		err = report.WriteJSON(stdout, result)
 	} else {
 		err = report.WriteScanText(stdout, result)
 	}

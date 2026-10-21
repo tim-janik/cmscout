@@ -154,7 +154,7 @@ func (mf metrics_flags) single_file(paths []string, stdin io.Reader, stdout io.W
 		return err
 	}
 	if mf.format == "json" {
-		err = report.WriteMetricsJSON(stdout, snapshot)
+		err = report.WriteJSON(stdout, snapshot)
 	} else {
 		err = report.WriteMetricsText(stdout, snapshot)
 	}
@@ -207,7 +207,7 @@ func (mf metrics_flags) compare(cf compareFlags, paths []string, stdin io.Reader
 		}
 	}
 	if mf.format == "json" {
-		err = report.WriteComparisonJSON(stdout, comparison)
+		err = report.WriteJSON(stdout, comparison)
 	} else {
 		err = report.WriteComparisonText(stdout, comparison)
 	}
