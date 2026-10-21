@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"cmscout/pkg/analysis"
+	"cmscout/pkg/parser"
 )
 
 func compare_sources(t *testing.T, path, before, after string) *Comparison {
@@ -161,7 +161,7 @@ func TestCompare_partial_measurements_preserve_inventory(t *testing.T) {
 func TestCompare_untrusted_inventory(t *testing.T) {
 	for _, source := range []string{"function f() {", "function f() { return '\xff'; }"} {
 		before := measurement(t, "a.js", "function f() { return 0; }")
-		ast, err := analysis.Parse([]byte(source), "a.js")
+		ast, err := parser.ParsePath([]byte(source), "a.js")
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -7,13 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"cmscout/pkg/analysis"
 	"cmscout/pkg/parser"
 )
 
 func source_tree(t *testing.T, path, source string) *parser.AST {
 	t.Helper()
-	ast, err := analysis.Parse([]byte(source), path)
+	ast, err := parser.ParsePath([]byte(source), path)
 	if err != nil {
 		t.Fatal(err)
 	}

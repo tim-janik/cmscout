@@ -9,7 +9,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"cmscout/pkg/analysis"
+	"cmscout/pkg/parser"
 )
 
 func measurement(t *testing.T, path, source string) *Snapshot {
@@ -161,7 +161,7 @@ func TestComments_ambiguous_and_directives(t *testing.T) {
 
 func TestMeasure_damaged_source(t *testing.T) {
 	for _, source := range []string{"function f() {", "function f() { return '\xff'; }"} {
-		ast, err := analysis.Parse([]byte(source), "a.js")
+		ast, err := parser.ParsePath([]byte(source), "a.js")
 		if err != nil {
 			t.Fatal(err)
 		}

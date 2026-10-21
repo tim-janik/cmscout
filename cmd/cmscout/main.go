@@ -10,12 +10,12 @@ import (
 	"io"
 	"os"
 
-	"cmscout/pkg/analysis"
 	"cmscout/pkg/correlate"
 	"cmscout/pkg/diff"
 	"cmscout/pkg/extract"
 	"cmscout/pkg/ir"
 	"cmscout/pkg/lang"
+	"cmscout/pkg/parser"
 	"cmscout/pkg/report"
 )
 
@@ -268,7 +268,7 @@ func separate_macro_functions(paths ...string) bool {
 }
 
 func parseAndExtract(src, path string, separateMacros bool) (*ir.SemanticDocument, error) {
-	ast, err := analysis.Parse([]byte(src), path)
+	ast, err := parser.ParsePath([]byte(src), path)
 	if err != nil {
 		return nil, err
 	}

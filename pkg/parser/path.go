@@ -1,15 +1,15 @@
 // This Source Code Form is licensed MPL-2.0: http://mozilla.org/MPL/2.0
 
-package analysis
+package parser
 
 import (
 	"fmt"
 
 	"cmscout/pkg/lang"
-	"cmscout/pkg/parser"
 )
 
-func Parse(source []byte, path string) (*parser.AST, error) {
+// ParsePath detects the language from path; .h files keep the C or C++ parse with fewer errors, ties keep C++.
+func ParsePath(source []byte, path string) (*AST, error) {
 	language, ok := lang.Detect(path)
 	if !ok {
 		return nil, fmt.Errorf("unsupported language for %s", path)
@@ -36,8 +36,8 @@ func Parse(source []byte, path string) (*parser.AST, error) {
 	}
 }
 
-func parse_language(source []byte, language lang.Language) (*parser.AST, error) {
-	p, err := parser.New(language)
+func parse_language(source []byte, language lang.Language) (*AST, error) {
+	p, err := New(language)
 	if err != nil {
 		return nil, err
 	}

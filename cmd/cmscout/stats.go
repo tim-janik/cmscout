@@ -9,9 +9,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"cmscout/pkg/analysis"
 	"cmscout/pkg/extract"
 	"cmscout/pkg/lang"
+	"cmscout/pkg/parser"
 	"cmscout/pkg/report"
 	"cmscout/pkg/source"
 	"cmscout/pkg/stats"
@@ -135,7 +135,7 @@ func scan_stats(sf scan_flags, paths []string, limit int, stdout io.Writer) erro
 }
 
 func analyze_stats(src, path string, maxCommentLines int) (*stats.Report, error) {
-	ast, err := analysis.Parse([]byte(src), path)
+	ast, err := parser.ParsePath([]byte(src), path)
 	if err != nil {
 		return nil, err
 	}

@@ -5,7 +5,7 @@ package metrics
 import (
 	"testing"
 
-	"cmscout/pkg/analysis"
+	"cmscout/pkg/parser"
 )
 
 func TestCompare_missing_file(t *testing.T) {
@@ -37,7 +37,7 @@ func TestCompare_missing_file(t *testing.T) {
 }
 
 func TestCompare_missing_file_unknown_and_empty(t *testing.T) {
-	ast, err := analysis.Parse([]byte("function f() {"), "a.js")
+	ast, err := parser.ParsePath([]byte("function f() {"), "a.js")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -8,8 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"cmscout/pkg/analysis"
 	"cmscout/pkg/metrics"
+	"cmscout/pkg/parser"
 	"cmscout/pkg/report"
 	"cmscout/pkg/source"
 )
@@ -66,7 +66,7 @@ func (mf metrics_flags) scan_files(paths []string, stdout io.Writer) error {
 }
 
 func measure_source(content []byte, options metrics.Options) (*metrics.Snapshot, error) {
-	ast, err := analysis.Parse(content, options.Path)
+	ast, err := parser.ParsePath(content, options.Path)
 	if err != nil {
 		return nil, err
 	}
