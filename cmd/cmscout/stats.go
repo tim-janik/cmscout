@@ -81,7 +81,7 @@ func run_stats(src, path string, max_comment_lines int, stdout io.Writer) error 
 		return err
 	}
 	if r.Status != "complete" {
-		return metrics_error{fmt.Errorf("statistics incomplete for %s; see report diagnostics", path)}
+		return fmt.Errorf("statistics incomplete for %s; see report diagnostics", path)
 	}
 	return nil
 }
@@ -89,7 +89,7 @@ func run_stats(src, path string, max_comment_lines int, stdout io.Writer) error 
 func scan_stats(sf scan_flags, paths []string, limit int, stdout io.Writer) error {
 	files, err := sf.files(paths)
 	if err != nil {
-		return metrics_error{err}
+		return err
 	}
 	partial := len(files.Diagnostics) > 0
 	if _, err := fmt.Fprintf(stdout, "# cmscout stats scan: %s\n", report.DisplayPath(files.Root)); err != nil {
@@ -129,7 +129,7 @@ func scan_stats(sf scan_flags, paths []string, limit int, stdout io.Writer) erro
 		}
 	}
 	if partial {
-		return metrics_error{fmt.Errorf("statistics scan incomplete; see report diagnostics")}
+		return fmt.Errorf("statistics scan incomplete; see report diagnostics")
 	}
 	return nil
 }

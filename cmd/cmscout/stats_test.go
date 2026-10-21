@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -80,13 +81,16 @@ func TestStats_incomplete(t *testing.T) {
 func TestStats_rejects_conflicting_flags(t *testing.T) {
 	for _, args := range [][]string{
 		{"--stats", "--metrics"}, {"--stats", "--simple-diff"}, {"--stats", "--max-comment-lines", "-1"},
-		{"--stats", "--scan", "--old", "demo.c"}, {"--max-comment-lines", "5"},
-		{"--stats", "--scan", "--metrics"}, {"--stats", "--scan", "--staged"},
+		{"--stats", "--scan", "--old", "demo.c"}, {"--metrics", "--max-comment-lines", "5", "demo.c"},
+		{"--stats", "--scan", "--metrics"}, {"--stats", "--scan", "--staged"}, {"--stats", "--unknown"},
 	} {
 		var out, stderr bytes.Buffer
-		if err := run(args, strings.NewReader(""), &out, &stderr); err == nil {
-			t.Errorf("accepted %v", args)
+		if err := run(args, strings.NewReader(""), &out, &stderr); exit_code(err) != 2 {
+			t.Errorf("%v: error=%v code=%d", args, err, exit_code(err))
 		}
+	}
+	if err := run([]string{"--max-comment-lines", "5"}, strings.NewReader(""), io.Discard, io.Discard); exit_code(err) != 1 {
+		t.Errorf("--max-comment-lines without --stats: %v", err)
 	}
 }
 
@@ -99,17 +103,17 @@ func TestStats_errors(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := run([]string{"--stats", unknown}, strings.NewReader("x"), &stdout, &stderr)
-	if err == nil || !strings.Contains(err.Error(), "unsupported language") {
+	if exit_code(err) != 2 || !strings.Contains(err.Error(), "unsupported language") {
 		t.Errorf("unsupported language error = %v", err)
 	}
 	// Wrong positional count.
 	err = run([]string{"--stats", "a.ts", "b.ts"}, strings.NewReader(""), &stdout, &stderr)
-	if err == nil || !strings.Contains(err.Error(), "usage: cmscout --stats") {
+	if exit_code(err) != 2 || !strings.Contains(err.Error(), "usage: cmscout --stats") {
 		t.Errorf("arg count error = %v", err)
 	}
 	// Missing file.
 	err = run([]string{"--stats", "/nonexistent/demo.ts"}, strings.NewReader(""), &stdout, &stderr)
-	if err == nil {
+	if exit_code(err) != 2 {
 		t.Error("missing file must error")
 	}
 }

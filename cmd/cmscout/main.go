@@ -62,14 +62,23 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			printUsage(stdout)
 			return nil
 		}
-		if mf.enabled {
-			return metrics_error{err}
+		if mf.enabled || stats_mode {
+			return exit2_error{err}
 		}
 		printUsage(stderr)
 		return err
 	}
 	if stats_mode {
-		return run_stats_flags(fs, cf, mf.scan_flags, max_comment_lines, stdin, stdout)
+		if err := run_stats_flags(fs, cf, mf.scan_flags, max_comment_lines, stdin, stdout); err != nil {
+			return exit2_error{err}
+		}
+		return nil
+	}
+	if mf.enabled {
+		if err := mf.run(fs, cf, stdin, stdout); err != nil {
+			return exit2_error{err}
+		}
+		return nil
 	}
 	stats_only := false
 	fs.Visit(func(f *flag.Flag) {
@@ -79,12 +88,6 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	})
 	if stats_only {
 		return fmt.Errorf("--max-comment-lines requires --stats")
-	}
-	if mf.enabled {
-		if err := mf.run(fs, cf, stdin, stdout); err != nil {
-			return metrics_error{err}
-		}
-		return nil
 	}
 	var metrics_only string
 	fs.Visit(func(option *flag.Flag) {

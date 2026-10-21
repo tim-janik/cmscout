@@ -159,3 +159,6 @@ directories, exclusions win, and `--root` sets the naming root. Each selected
 file is rendered as one `# cmscout stats:` section. Skipped files and errors are
 reported as `# skipped`/`# diagnostic` records; any error makes the scan partial
 and the CLI exits 2.
+
+Exit status follows metrics mode: 0 for a complete report, 2 for input errors
+such as a missing file or an unsupported flag, and 2 for partial reports.
