@@ -185,7 +185,7 @@ func Scan(paths []string, root string, filter Filter) (*FileSet, error) {
 				return nil
 			}
 			seen[name] = true
-			if strings.Contains("/"+filepath.ToSlash(filename)+"/", "/.git/") {
+			if strings.Contains("/"+name+"/", "/.git/") {
 				result.Skipped = append(result.Skipped, Notice{name, "metadata", "Git metadata"})
 				if entry.IsDir() {
 					return filepath.SkipDir
