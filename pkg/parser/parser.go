@@ -116,7 +116,8 @@ func (a *AST) Source() []byte { return a.src }
 // Language returns the language this AST was parsed with.
 func (a *AST) Language() lang.Language { return a.lang }
 
-// ErrorCount includes missing tokens inserted during error recovery.
+// ErrorCount counts error and missing nodes: a non-zero count means extraction is
+// incomplete and must be surfaced. Well-formed files return 0 without a walk.
 func (a *AST) ErrorCount() int {
 	root := a.RootNode()
 	if root == nil || !root.HasError() {
@@ -125,6 +126,7 @@ func (a *AST) ErrorCount() int {
 	return len(a.Diagnostics())
 }
 
+// Diagnostic locates one error or missing node left by parse recovery.
 type Diagnostic struct {
 	Kind      string
 	Token     string
@@ -136,6 +138,9 @@ type Diagnostic struct {
 	EndCol    uint
 }
 
+// Diagnostics lists error and missing nodes, including anonymous/extra children
+// so recovery nodes are not missed. Missing nodes carry the kind of the token
+// they stand in for, so IsMissing is required.
 func (a *AST) Diagnostics() []Diagnostic {
 	diagnostics := []Diagnostic{}
 	root := a.RootNode()
