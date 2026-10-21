@@ -987,6 +987,7 @@ func TestExtract_CppOperatorAndSpecializationNames(t *testing.T) {
 	src := `class C {
  public:
   C& operator=(const C&);
+  ~C();
   operator bool() const;
   void operator()();
 };
@@ -1000,6 +1001,7 @@ template<> void f<int>() {}
 	}
 	want := map[string]ir.BlockKind{
 		"operator=":     ir.KindMethod,
+		"~C":            ir.KindMethod,
 		"operator bool": ir.KindMethod,
 		"operator()":    ir.KindMethod,
 		"f<int>":        ir.KindFunction,

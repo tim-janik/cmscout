@@ -352,3 +352,14 @@ function foo() {}
 		t.Errorf("render output:\n%s\nwant:\n%s", sb.String(), want)
 	}
 }
+
+func TestAnalyze_MethodOwners(t *testing.T) {
+	goReport := analyzeSrc(t, "go", ".go", "s.go", "package p\n\ntype S struct{ x int }\n\nfunc (s *S) A() int { return s.x }\n\nfunc (s S) B() int { return 0 }\n", Options{})
+	if s := findBlock(goReport, "S"); s == nil || s.Methods != 2 || findBlock(goReport, "S.A") == nil {
+		t.Fatalf("Go receiver methods not owned by their type: %+v", goReport.Blocks)
+	}
+	cppReport := analyzeSrc(t, "cpp", ".cc", "c.cc", "class K {\n  void f();\n  void g() {}\n};\n\nvoid K::f() {}\n", Options{})
+	if k := findBlock(cppReport, "K"); k == nil || k.Methods != 2 {
+		t.Fatalf("out-of-class definition counted twice: %+v", cppReport.Blocks)
+	}
+}
