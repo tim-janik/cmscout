@@ -25,7 +25,7 @@ func WriteMetricsText(w io.Writer, snapshot *metrics.Snapshot) error {
 		return err
 	}
 	output := bufio.NewWriter(w)
-	path := strconv.Quote(snapshot.Path)
+	path := DisplayPath(snapshot.Path)
 	fmt.Fprintf(output, "metrics %s (%s; functions; %s)\n", path, snapshot.Language, snapshot.Status)
 	fmt.Fprintf(output, "profiles: %s\n", strings.Join(snapshot.Profiles, ", "))
 	for _, limitation := range snapshot.Limitations {
@@ -69,6 +69,15 @@ func WriteMetricsText(w io.Writer, snapshot *metrics.Snapshot) error {
 		}
 	}
 	return output.Flush()
+}
+
+// DisplayPath quotes a path only when it needs escaping, so plain locations stay clickable.
+func DisplayPath(path string) string {
+	quoted := strconv.Quote(path)
+	if quoted[1:len(quoted)-1] == path {
+		return path
+	}
+	return quoted
 }
 
 func metric_number(value *int) string {

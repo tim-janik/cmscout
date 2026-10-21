@@ -5,14 +5,17 @@ package stats
 import (
 	"fmt"
 	"io"
+
+	"cmscout/pkg/report"
 )
 
 func Render(w io.Writer, r *Report) error {
 	if r == nil {
 		return fmt.Errorf("stats: nil report")
 	}
+	path := report.DisplayPath(r.FilePath)
 	if _, err := fmt.Fprintf(w, "# cmscout stats: %s  (%s, %d parse errors)\n",
-		r.FilePath, r.Language, r.ParseErrors); err != nil {
+		path, r.Language, r.ParseErrors); err != nil {
 		return err
 	}
 
@@ -30,18 +33,18 @@ func Render(w io.Writer, r *Report) error {
 	for i := range r.Blocks {
 		b := &r.Blocks[i]
 		for ci < len(r.Comments) && r.Comments[ci].StartLine < b.StartLine {
-			if err := renderComment(w, r.Comments[ci], "", r.FilePath); err != nil {
+			if err := renderComment(w, r.Comments[ci], "", path); err != nil {
 				return err
 			}
 			ci++
 		}
 		for j := range b.PrefixComments {
-			if err := renderComment(w, b.PrefixComments[j], "  ", r.FilePath); err != nil {
+			if err := renderComment(w, b.PrefixComments[j], "  ", path); err != nil {
 				return err
 			}
 		}
 		line := fmt.Sprintf("block %s %s  at %s:%d-%d  lines=%d chars=%d  prefix_lines=%d prefix_chars=%d",
-			b.Kind, b.Qualified, r.FilePath, b.StartLine, b.EndLine, b.Lines, b.Chars,
+			b.Kind, b.Qualified, path, b.StartLine, b.EndLine, b.Lines, b.Chars,
 			b.PrefixLines, b.PrefixChars)
 		if isFunctionLike(b.Kind) {
 			if b.Complexity > 0 {
@@ -57,13 +60,13 @@ func Render(w io.Writer, r *Report) error {
 			return err
 		}
 		for j := range b.Comments {
-			if err := renderComment(w, b.Comments[j], "  ", r.FilePath); err != nil {
+			if err := renderComment(w, b.Comments[j], "  ", path); err != nil {
 				return err
 			}
 		}
 	}
 	for ; ci < len(r.Comments); ci++ {
-		if err := renderComment(w, r.Comments[ci], "", r.FilePath); err != nil {
+		if err := renderComment(w, r.Comments[ci], "", path); err != nil {
 			return err
 		}
 	}
