@@ -57,13 +57,12 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fs.StringVar(&addedStyle, "added-style", "white", "how to color added blocks: 'white' (only '+' green, body white, readable) or 'green' (entire line green)")
 	fs.StringVar(&removedStyle, "removed-style", "white", "how to color removed blocks: 'white' (only '-' red, body white) or 'red' (entire line red)")
 	fs.Usage = func() {}
-	metrics_mode := metrics_requested(fs, args)
 	if err := fs.Parse(args); err != nil {
 		if err == flag.ErrHelp {
 			printUsage(stdout)
 			return nil
 		}
-		if mf.enabled || metrics_mode {
+		if mf.enabled {
 			return metrics_error{err}
 		}
 		printUsage(stderr)
@@ -89,8 +88,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	}
 	var metrics_only string
 	fs.Visit(func(option *flag.Flag) {
-		switch option.Name {
-		case "format", "root", "name", "stdin-name", "explain", "scan", "include", "exclude", "staged", "worktree", "revision", "base", "parent":
+		if option.Name != "metrics" && mf.flags.Lookup(option.Name) != nil {
 			metrics_only = option.Name
 		}
 	})
