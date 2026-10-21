@@ -158,7 +158,7 @@ func Scan(paths []string, root string, filter Filter) (*FileSet, error) {
 		return nil, err
 	}
 	if !info.IsDir() {
-		return nil, fmt.Errorf("metrics root must be a directory: %s", root)
+		return nil, fmt.Errorf("scan root must be a directory: %s", root)
 	}
 	for _, input := range inputs {
 		if _, err := relative_path(root, input); err != nil {
@@ -230,7 +230,7 @@ func relative_path(root, filename string) (string, error) {
 		return "", err
 	}
 	if name == ".." || strings.HasPrefix(name, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("metrics input %s is outside source root %s", filename, root)
+		return "", fmt.Errorf("input %s is outside source root %s", filename, root)
 	}
 	return filepath.ToSlash(name), nil
 }

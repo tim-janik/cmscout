@@ -65,7 +65,7 @@ type Report struct {
 }
 
 // is_function_like reports whether a kind counts as a function-like block that
-// owns enclosed comments and receives a branch count.
+// owns enclosed comments and receives a complexity from the metrics engine.
 func is_function_like(k ir.BlockKind) bool {
 	switch k {
 	case ir.KindFunction, ir.KindMethod, ir.KindObjectMethod, ir.KindLifecycle,
@@ -110,8 +110,8 @@ func shows_method_count(k ir.BlockKind) bool {
 }
 
 // Analyze computes statistics for all semantic blocks of a parsed document.
-// The AST is required for branch counting; its source bytes must match the
-// document (as produced by extract.Extract).
+// Complexity comes from metrics.Measure on the AST, whose source bytes must
+// match the document (as produced by extract.Extract).
 func Analyze(doc *ir.SemanticDocument, ast *parser.AST, opts Options) (*Report, error) {
 	if doc == nil {
 		return nil, fmt.Errorf("stats: nil document")
