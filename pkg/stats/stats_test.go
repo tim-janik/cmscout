@@ -11,11 +11,11 @@ import (
 	"cmscout/pkg/parser"
 )
 
-// analyzeSrc parses, extracts, and analyzes a source string in one step.
-func analyzeSrc(t *testing.T, langName, ext, filePath, src string, opts Options) *Report {
+// analyze_source parses, extracts, and analyzes a source string in one step.
+func analyze_source(t *testing.T, language_name, ext, file_path, src string, opts Options) *Report {
 	t.Helper()
-	langCode := lang.Language{Name: langName, Ext: ext}
-	p, err := parser.New(langCode)
+	language := lang.Language{Name: language_name, Ext: ext}
+	p, err := parser.New(language)
 	if err != nil {
 		t.Fatalf("parser not available: %v", err)
 	}
@@ -25,7 +25,7 @@ func analyzeSrc(t *testing.T, langName, ext, filePath, src string, opts Options)
 		t.Fatalf("parse error: %v", err)
 	}
 	defer ast.Close()
-	ex := extract.NewWithOptions(filePath, extract.Options{})
+	ex := extract.NewWithOptions(file_path, extract.Options{})
 	doc, err := ex.Extract(ast)
 	if err != nil {
 		t.Fatalf("extract error: %v", err)
@@ -37,8 +37,8 @@ func analyzeSrc(t *testing.T, langName, ext, filePath, src string, opts Options)
 	return r
 }
 
-// findBlock returns the block with the given qualified name, or nil.
-func findBlock(r *Report, qualified string) *BlockStats {
+// find_block returns the block with the given qualified name, or nil.
+func find_block(r *Report, qualified string) *BlockStats {
 	for i := range r.Blocks {
 		if r.Blocks[i].Qualified == qualified {
 			return &r.Blocks[i]
@@ -47,7 +47,7 @@ func findBlock(r *Report, qualified string) *BlockStats {
 	return nil
 }
 
-func TestAnalyze_TSFunctionPrefixInlineAndBranches(t *testing.T) {
+func TestAnalyze_ts_function_prefix_inline_and_branches(t *testing.T) {
 	src := `
 /// Updates the delta.
 /// Second doc line.
@@ -64,8 +64,8 @@ export function updateDelta(delta: number): number {
   return result && delta ? result : 0;
 }
 `
-	r := analyzeSrc(t, "ts", ".ts", "demo.ts", src, Options{MaxCommentLines: 2})
-	fn := findBlock(r, "updateDelta")
+	r := analyze_source(t, "ts", ".ts", "demo.ts", src, Options{MaxCommentLines: 2})
+	fn := find_block(r, "updateDelta")
 	if fn == nil {
 		t.Fatalf("missing function block, got: %+v", r.Blocks)
 	}
@@ -105,7 +105,7 @@ export function updateDelta(delta: number): number {
 	}
 }
 
-func TestAnalyze_TSClassMethodsAndQualifiedNames(t *testing.T) {
+func TestAnalyze_ts_class_methods_and_qualified_names(t *testing.T) {
 	src := `
 export class Knob {
   /** Long doc comment for the lifecycle
@@ -119,8 +119,8 @@ export class Knob {
   }
 }
 `
-	r := analyzeSrc(t, "ts", ".ts", "demo.ts", src, Options{MaxCommentLines: 2})
-	cls := findBlock(r, "Knob")
+	r := analyze_source(t, "ts", ".ts", "demo.ts", src, Options{MaxCommentLines: 2})
+	cls := find_block(r, "Knob")
 	if cls == nil {
 		t.Fatalf("missing class block: %+v", r.Blocks)
 	}
@@ -131,7 +131,7 @@ export class Knob {
 	if len(cls.Comments) != 0 {
 		t.Errorf("class inline comments = %d, want 0: %+v", len(cls.Comments), cls.Comments)
 	}
-	lc := findBlock(r, "Knob.connectedCallback")
+	lc := find_block(r, "Knob.connectedCallback")
 	if lc == nil {
 		t.Fatalf("missing lifecycle block: %+v", r.Blocks)
 	}
@@ -147,12 +147,12 @@ export class Knob {
 	if lc.PrefixComments[0].PrefixOf != "Knob.connectedCallback" {
 		t.Errorf("prefix_of = %q, want Knob.connectedCallback", lc.PrefixComments[0].PrefixOf)
 	}
-	if render := findBlock(r, "Knob.render"); render == nil || render.Methods != 0 {
+	if render := find_block(r, "Knob.render"); render == nil || render.Methods != 0 {
 		t.Errorf("render block missing or wrong: %+v", render)
 	}
 }
 
-func TestAnalyze_TSCommentBoundaries(t *testing.T) {
+func TestAnalyze_ts_comment_boundaries(t *testing.T) {
 	src := `
 // Header comment, blank line below.
 // Not a prefix (blank line separates).
@@ -161,12 +161,12 @@ const x = 1; // trailing comment: not a prefix
 
 function foo() {}
 `
-	r := analyzeSrc(t, "ts", ".ts", "demo.ts", src, Options{})
+	r := analyze_source(t, "ts", ".ts", "demo.ts", src, Options{})
 	// File-level comments: header run and trailing comment.
 	if len(r.Comments) != 2 {
 		t.Errorf("file-level comments = %d, want 2: %+v", len(r.Comments), r.Comments)
 	}
-	foo := findBlock(r, "foo")
+	foo := find_block(r, "foo")
 	if foo == nil {
 		t.Fatal("missing function foo")
 	}
@@ -175,7 +175,7 @@ function foo() {}
 	}
 }
 
-func TestAnalyze_CPPScopeBranchesAndMethods(t *testing.T) {
+func TestAnalyze_cpp_scope_branches_and_methods(t *testing.T) {
 	src := `
 namespace app {
 class Widget {
@@ -195,8 +195,8 @@ int Widget::value() const {
 }
 }
 `
-	r := analyzeSrc(t, "cpp", ".cpp", "demo.cpp", src, Options{})
-	cls := findBlock(r, "app::Widget")
+	r := analyze_source(t, "cpp", ".cpp", "demo.cpp", src, Options{})
+	cls := find_block(r, "app::Widget")
 	if cls == nil {
 		t.Fatalf("missing class block: %+v", r.Blocks)
 	}
@@ -219,7 +219,7 @@ int Widget::value() const {
 	}
 }
 
-func TestAnalyze_GoBranches(t *testing.T) {
+func TestAnalyze_go_branches(t *testing.T) {
 	src := `
 package main
 func compute(a, b int) int {
@@ -243,8 +243,8 @@ func compute(a, b int) int {
 	}
 }
 `
-	r := analyzeSrc(t, "go", ".go", "demo.go", src, Options{})
-	fn := findBlock(r, "compute")
+	r := analyze_source(t, "go", ".go", "demo.go", src, Options{})
+	fn := find_block(r, "compute")
 	if fn == nil {
 		t.Fatalf("missing function: %+v", r.Blocks)
 	}
@@ -253,7 +253,7 @@ func compute(a, b int) int {
 	}
 }
 
-func TestAnalyze_BashBranches(t *testing.T) {
+func TestAnalyze_bash_branches(t *testing.T) {
 	src := `
 deploy() {
   if [ -z "$1" ]; then
@@ -279,8 +279,8 @@ deploy() {
   [ -n "$1" ] && echo has || echo none
 }
 `
-	r := analyzeSrc(t, "bash", ".sh", "demo.sh", src, Options{})
-	fn := findBlock(r, "deploy")
+	r := analyze_source(t, "bash", ".sh", "demo.sh", src, Options{})
+	fn := find_block(r, "deploy")
 	if fn == nil {
 		t.Fatalf("missing function: %+v", r.Blocks)
 	}
@@ -289,7 +289,7 @@ deploy() {
 	}
 }
 
-func TestAnalyze_CCommentInsideFunction(t *testing.T) {
+func TestAnalyze_c_comment_inside_function(t *testing.T) {
 	src := `
 void foo(void) {
   /* multi-line comment
@@ -297,8 +297,8 @@ void foo(void) {
   int x = 1;
 }
 `
-	r := analyzeSrc(t, "c", ".c", "demo.c", src, Options{MaxCommentLines: 1})
-	fn := findBlock(r, "foo")
+	r := analyze_source(t, "c", ".c", "demo.c", src, Options{MaxCommentLines: 1})
+	fn := find_block(r, "foo")
 	if fn == nil {
 		t.Fatalf("missing function: %+v", r.Blocks)
 	}
@@ -314,7 +314,7 @@ void foo(void) {
 	}
 }
 
-func TestAnalyze_ReportOrder(t *testing.T) {
+func TestAnalyze_report_order(t *testing.T) {
 	src := `
 /// doc for a
 function a() {}
@@ -323,7 +323,7 @@ function a() {}
 
 function b() {}
 `
-	r := analyzeSrc(t, "ts", ".ts", "demo.ts", src, Options{})
+	r := analyze_source(t, "ts", ".ts", "demo.ts", src, Options{})
 	if len(r.Blocks) != 2 || len(r.Comments) != 1 {
 		t.Fatalf("blocks = %d comments = %d, want 2/1", len(r.Blocks), len(r.Comments))
 	}
@@ -335,12 +335,12 @@ function b() {}
 	}
 }
 
-func TestRender_Format(t *testing.T) {
+func TestRender_format(t *testing.T) {
 	src := `
 /// doc
 function foo() {}
 `
-	r := analyzeSrc(t, "ts", ".ts", "demo.ts", src, Options{MaxCommentLines: 3})
+	r := analyze_source(t, "ts", ".ts", "demo.ts", src, Options{MaxCommentLines: 3})
 	var sb strings.Builder
 	if err := Render(&sb, r); err != nil {
 		t.Fatalf("render error: %v", err)
@@ -353,20 +353,20 @@ function foo() {}
 	}
 }
 
-func TestAnalyze_MethodOwners(t *testing.T) {
-	goReport := analyzeSrc(t, "go", ".go", "s.go", "package p\n\ntype S struct{ x int }\n\nfunc (s *S) A() int { return s.x }\n\nfunc (s S) B() int { return 0 }\n", Options{})
-	if s := findBlock(goReport, "S"); s == nil || s.Methods != 2 || findBlock(goReport, "S.A") == nil {
-		t.Fatalf("Go receiver methods not owned by their type: %+v", goReport.Blocks)
+func TestAnalyze_method_owners(t *testing.T) {
+	go_report := analyze_source(t, "go", ".go", "s.go", "package p\n\ntype S struct{ x int }\n\nfunc (s *S) A() int { return s.x }\n\nfunc (s S) B() int { return 0 }\n", Options{})
+	if s := find_block(go_report, "S"); s == nil || s.Methods != 2 || find_block(go_report, "S.A") == nil {
+		t.Fatalf("Go receiver methods not owned by their type: %+v", go_report.Blocks)
 	}
-	cppReport := analyzeSrc(t, "cpp", ".cc", "c.cc", "class K {\n  void f();\n  void g() {}\n};\n\nvoid K::f() {}\n", Options{})
-	if k := findBlock(cppReport, "K"); k == nil || k.Methods != 2 {
-		t.Fatalf("out-of-class definition counted twice: %+v", cppReport.Blocks)
+	cpp_report := analyze_source(t, "cpp", ".cc", "c.cc", "class K {\n  void f();\n  void g() {}\n};\n\nvoid K::f() {}\n", Options{})
+	if k := find_block(cpp_report, "K"); k == nil || k.Methods != 2 {
+		t.Fatalf("out-of-class definition counted twice: %+v", cpp_report.Blocks)
 	}
 }
 
-func TestAnalyze_SharedPrefixHasOneOwner(t *testing.T) {
-	r := analyzeSrc(t, "js", ".js", "p.js", "// doc\nconst a = () => 0, b = () => 1;\n", Options{})
-	if a, b := findBlock(r, "a"), findBlock(r, "b"); a == nil || b == nil || a.PrefixLines != 1 || b.PrefixLines != 0 {
+func TestAnalyze_shared_prefix_has_one_owner(t *testing.T) {
+	r := analyze_source(t, "js", ".js", "p.js", "// doc\nconst a = () => 0, b = () => 1;\n", Options{})
+	if a, b := find_block(r, "a"), find_block(r, "b"); a == nil || b == nil || a.PrefixLines != 1 || b.PrefixLines != 0 {
 		t.Fatalf("one prefix comment claimed by several blocks: %+v", r.Blocks)
 	}
 }

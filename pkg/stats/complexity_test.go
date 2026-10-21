@@ -89,7 +89,7 @@ func TestComplexity_decisions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := analyzeSrc(t, tt.language, "", "demo", tt.source, Options{})
+			r := analyze_source(t, tt.language, "", "demo", tt.source, Options{})
 			if r.ParseErrors != 0 {
 				t.Fatalf("fixture has %d parse errors", r.ParseErrors)
 			}
@@ -132,7 +132,7 @@ func TestComplexity_function_boundaries(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.language, func(t *testing.T) {
-			r := analyzeSrc(t, tt.language, "", "demo", tt.source, Options{})
+			r := analyze_source(t, tt.language, "", "demo", tt.source, Options{})
 			if r.ParseErrors != 0 {
 				t.Fatalf("fixture has %d parse errors", r.ParseErrors)
 			}
@@ -156,7 +156,7 @@ func TestComplexity_unknown(t *testing.T) {
 		"#define F(x) ((x) ? 1 : 0)\n",
 		"int f(void) { return @; }",
 	} {
-		r := analyzeSrc(t, "c", ".c", "demo.c", source, Options{})
+		r := analyze_source(t, "c", ".c", "demo.c", source, Options{})
 		var out strings.Builder
 		if err := Render(&out, r); err != nil {
 			t.Fatal(err)

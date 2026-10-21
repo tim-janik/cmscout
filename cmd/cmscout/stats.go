@@ -69,11 +69,11 @@ func run_stats_flags(fs *flag.FlagSet, cf compareFlags, sf scan_flags, limit int
 	if err != nil {
 		return err
 	}
-	return runStats(src, name, limit, stdout)
+	return run_stats(src, name, limit, stdout)
 }
 
-func runStats(src, path string, maxCommentLines int, stdout io.Writer) error {
-	r, err := analyze_stats(src, path, maxCommentLines)
+func run_stats(src, path string, max_comment_lines int, stdout io.Writer) error {
+	r, err := analyze_stats(src, path, max_comment_lines)
 	if err != nil {
 		return err
 	}
@@ -134,7 +134,7 @@ func scan_stats(sf scan_flags, paths []string, limit int, stdout io.Writer) erro
 	return nil
 }
 
-func analyze_stats(src, path string, maxCommentLines int) (*stats.Report, error) {
+func analyze_stats(src, path string, max_comment_lines int) (*stats.Report, error) {
 	ast, err := parser.ParsePath([]byte(src), path)
 	if err != nil {
 		return nil, err
@@ -144,5 +144,5 @@ func analyze_stats(src, path string, maxCommentLines int) (*stats.Report, error)
 	if err != nil {
 		return nil, err
 	}
-	return stats.Analyze(doc, ast, stats.Options{MaxCommentLines: maxCommentLines})
+	return stats.Analyze(doc, ast, stats.Options{MaxCommentLines: max_comment_lines})
 }

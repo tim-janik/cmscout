@@ -128,10 +128,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 
 // runSemanticReview runs the full pipeline (detect → parse → extract → match → correlate → diff → report).
 func runSemanticReview(cf compareFlags, opts report.Options, oldSrc, newSrc string, stdout io.Writer) error {
-	return runSemanticReviewDocuments(cf, opts, oldSrc, newSrc, nil, nil, stdout)
+	return run_semantic_review_documents(cf, opts, oldSrc, newSrc, nil, nil, stdout)
 }
 
-func runSemanticReviewDocuments(cf compareFlags, opts report.Options,
+func run_semantic_review_documents(cf compareFlags, opts report.Options,
 	oldSrc, newSrc string, oldDoc, newDoc *ir.SemanticDocument, stdout io.Writer) error {
 	// Build pipeline with shared word-diff and ignore-space options.
 	d := diff.NewWithOpts(diff.Options{
