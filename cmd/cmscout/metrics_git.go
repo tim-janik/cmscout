@@ -3,12 +3,10 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 
 	"cmscout/pkg/ir"
-	"cmscout/pkg/lang"
 	"cmscout/pkg/metrics"
 	"cmscout/pkg/report"
 	"cmscout/pkg/source"
@@ -55,13 +53,13 @@ func (mf metrics_flags) git_files(mode string, cf compareFlags, stdout io.Writer
 }
 
 func (mf metrics_flags) compare_git_file(cf compareFlags, root string, pair source.FilePair) (*metrics.Comparison, error) {
-	separate_macros := true
+	var paths []string
 	for _, file := range []*source.File{pair.Before, pair.After} {
 		if file != nil {
-			language, known := lang.Detect(file.Path)
-			separate_macros = separate_macros && known && lang.HasMacroFunctions(language)
+			paths = append(paths, file.Path)
 		}
 	}
+	separate_macros := separate_macro_functions(paths...)
 	var snapshots [2]*metrics.Snapshot
 	var documents [2]*ir.SemanticDocument
 	var contents [2]string
@@ -85,16 +83,8 @@ func (mf metrics_flags) compare_git_file(cf compareFlags, root string, pair sour
 	if err != nil {
 		return nil, err
 	}
-	if comparison.RangePrecision == "unavailable" {
-		return comparison, nil
+	if comparison.RangePrecision != "unavailable" {
+		comparison.Diff, err = render_metrics_diff(cf, names, contents, documents)
 	}
-	var rendered bytes.Buffer
-	cf.oldName, cf.newName = names[0], names[1]
-	err = runSemanticReviewDocuments(cf, report.Options{NoColor: true, IgnoreSpace: cf.ignoreSpace},
-		contents[0], contents[1], documents[0], documents[1], &rendered)
-	if err != nil {
-		return nil, err
-	}
-	comparison.Diff = &metrics.RenderedDiff{Format: "cmscout-text-v1", Text: rendered.String()}
-	return comparison, nil
+	return comparison, err
 }
