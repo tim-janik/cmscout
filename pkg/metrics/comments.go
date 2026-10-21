@@ -35,14 +35,14 @@ func (inv *inventory) measure_comments(index *source_index) ([]Comment, []Diagno
 			continue
 		}
 		end := node_span(inv.comments[last])
-		if !inv.prefix_gap(index, end.EndByte, offset) || !inv.own_line(index, end) || inv.directive(last) {
+		if !inv.prefix_gap(end.EndByte, offset) || !inv.own_line(index, end) || inv.directive(last) {
 			continue
 		}
 		first := last
 		for first > 0 {
 			previous := node_span(inv.comments[first-1])
 			if consumed[first-1] || inv.directive(first-1) || !inv.own_line(index, previous) ||
-				!inv.prefix_gap(index, previous.EndByte, inv.comments[first].StartByte()) {
+				!inv.prefix_gap(previous.EndByte, inv.comments[first].StartByte()) {
 				break
 			}
 			first--
@@ -89,7 +89,7 @@ func (inv *inventory) measure_comments(index *source_index) ([]Comment, []Diagno
 		if role != "directive" && inv.single_own_line(index, span) {
 			for i+1 < len(inv.comments) && !consumed[i+1] && inv.comment_owners[i+1] == owner && !inv.directive(i+1) {
 				next := node_span(inv.comments[i+1])
-				if !inv.single_own_line(index, next) || !inv.prefix_gap(index, span.EndByte, next.StartByte) {
+				if !inv.single_own_line(index, next) || !inv.prefix_gap(span.EndByte, next.StartByte) {
 					break
 				}
 				span = index.span(span.StartByte, next.EndByte)
@@ -108,7 +108,7 @@ func (inv *inventory) measure_comments(index *source_index) ([]Comment, []Diagno
 	return comments, diagnostics
 }
 
-func (inv *inventory) prefix_gap(index *source_index, end, start uint) bool {
+func (inv *inventory) prefix_gap(end, start uint) bool {
 	if end > start {
 		return false
 	}

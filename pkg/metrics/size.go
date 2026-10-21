@@ -63,11 +63,9 @@ func (index *source_index) size(span *Span) *Size {
 	if start == end {
 		return size
 	}
-	if start != end {
-		size.Lines = int(span.EndLine-span.StartLine) + 1
-		if span.EndCol == 0 {
-			size.Lines--
-		}
+	size.Lines = int(span.EndLine-span.StartLine) + 1
+	if span.EndCol == 0 {
+		size.Lines--
 	}
 	invalid := sort.Search(len(index.invalid), func(i int) bool { return index.invalid[i] >= start })
 	if invalid < len(index.invalid) && index.invalid[invalid] < end ||
