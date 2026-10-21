@@ -4,6 +4,7 @@ package metrics
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -80,8 +81,22 @@ func TestCompare_ambiguous_unresolved_owners(t *testing.T) {
 	}
 }
 
+func TestCompare_table_below_component_limit(t *testing.T) {
+	var rows strings.Builder
+	for i := range 400 {
+		fmt.Fprintf(&rows, "\tT{v: %d},\n", i)
+	}
+	source := "package p\n\nvar table = []T{\n" + rows.String() + "}\n"
+	result := compare_sources(t, "a.go", source, strings.Replace(source, "{v: 7}", "{v: 7000}", 1))
+	for _, diagnostic := range result.Diagnostics {
+		if diagnostic.Kind == "comparison_limit" {
+			t.Fatalf("ordinary table hit the comparison limit: %+v", diagnostic)
+		}
+	}
+}
+
 func TestCompare_minified_component_limit(t *testing.T) {
-	source := strings.Repeat("call(() => 1);", 300)
+	source := strings.Repeat("call(() => 1);", 1100)
 	for _, after := range []string{source, strings.Replace(source, "1", "2", 1)} {
 		result := compare_sources(t, "a.js", source, after)
 		if result.Status != "partial" || result.Before.Status != "complete" || result.After.Status != "complete" ||
