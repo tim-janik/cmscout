@@ -226,7 +226,7 @@ Comparison JSON has these fields:
 | Field | Meaning |
 | --- | --- |
 | `schema_version`, `status` | Comparison contract version and completeness. |
-| `before`, `after` | Complete snapshot records, including unchanged functions. |
+| `before`, `after` | Snapshot records, including unchanged functions; each can be `partial`. |
 | `changes` | Touched components, with old and new qualified-name references. |
 | `before_ranges`, `after_ranges` | Changed original source lines, including edits outside measured functions. |
 | `diagnostics` | Comparison problems, in addition to diagnostics in each snapshot. |
