@@ -48,7 +48,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fs.SetOutput(stderr)
 	cf.register(fs)
 	mf.register(fs)
-	fs.BoolVar(&stats_mode, "stats", false, "report single-file block statistics")
+	fs.BoolVar(&stats_mode, "stats", false, "report block statistics for a file or a scan")
 	fs.IntVar(&max_comment_lines, "max-comment-lines", 5, "flag long comments in --stats (0 disables)")
 	fs.BoolVar(&show_version, "version", false, "show version")
 	fs.BoolVar(&summary, "summary", false, "show only summary statistics")
@@ -333,7 +333,7 @@ Usage:
   (only one side may be stdin).
 
 Flags:
-  --stats                 Report single-file block sizes, comments, methods and complexity
+  --stats                 Report block sizes, comments, methods and complexity
   --max-comment-lines N   In --stats, flag long comments (default 5; 0 disables)
   --metrics               Measure one file, or compare metrics and diff two files
   --format text|json      Metrics output format (default: text)
