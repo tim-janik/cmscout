@@ -53,17 +53,18 @@ func (mf *metrics_flags) register(fs *flag.FlagSet) {
 	mf.flags.VisitAll(func(option *flag.Flag) { fs.Var(option.Value, option.Name, option.Usage) })
 }
 
-type metrics_error struct{ cause error }
+// exit2_error marks input errors and incomplete reports of --metrics and --stats.
+type exit2_error struct{ cause error }
 
-func (err metrics_error) Error() string { return err.cause.Error() }
-func (err metrics_error) Unwrap() error { return err.cause }
+func (err exit2_error) Error() string { return err.cause.Error() }
+func (err exit2_error) Unwrap() error { return err.cause }
 
 func exit_code(err error) int {
 	if err == nil {
 		return 0
 	}
-	var metric_error metrics_error
-	if errors.As(err, &metric_error) {
+	var exit2 exit2_error
+	if errors.As(err, &exit2) {
 		return 2
 	}
 	return 1
