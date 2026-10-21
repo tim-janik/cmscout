@@ -755,7 +755,7 @@ func (e *Extractor) cFunctionNameRoot(node *tree_sitter.Node) bool {
 	}
 	switch node.Kind() {
 	case "identifier", "type_identifier", "field_identifier", "namespace_identifier",
-		"qualified_identifier", "operator_name", "operator_cast", "template_function":
+		"qualified_identifier", "operator_name", "operator_cast", "template_function", "destructor_name":
 		return true
 	case "attributed_declarator":
 		return e.cFunctionNameRoot(e.cUnderlyingDeclarator(node))

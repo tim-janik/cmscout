@@ -205,7 +205,9 @@ func Analyze(doc *ir.SemanticDocument, ast *parser.AST, opts Options) (*Report, 
 		sep = "::"
 	}
 	for _, b := range all {
-		if b.Parent != "" && isMethodKind(b.Kind) {
+		// A C++ member defined outside its class repeats a declaration inside it.
+		if parent := byID[b.Parent]; parent != nil && isMethodKind(b.Kind) &&
+			(doc.Language == "go" || parent.Span.StartByte <= b.Span.StartByte && b.Span.EndByte <= parent.Span.EndByte) {
 			methodCounts[b.Parent]++
 		}
 		qualified[b.ID] = qualifiedName(b, byID, sep)

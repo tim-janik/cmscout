@@ -34,9 +34,17 @@ func function_stats(doc *ir.SemanticDocument, ast *parser.AST) (*ir.SemanticDocu
 		blocks[byte_span{b.Span.StartByte, b.Span.EndByte}] = i
 	}
 	callables := make(map[byte_span]metrics.Component)
+	owners := make(map[string]metrics.Component)
 	for _, c := range snapshot.Components {
+		owners[c.QualifiedName] = c
 		if c.FunctionMetrics != nil {
 			callables[byte_span{c.Span.StartByte, c.Span.EndByte}] = c
+		}
+	}
+	types := make(map[string]string)
+	for _, b := range copy_doc.Blocks {
+		if b.Parent == "" && isContainerKind(b.Kind) {
+			types[b.Name] = b.ID
 		}
 	}
 	complexities := make(map[string]int)
@@ -82,6 +90,9 @@ func function_stats(doc *ir.SemanticDocument, ast *parser.AST) (*ir.SemanticDocu
 					Span:   ir.SourceSpan{StartByte: node.StartByte(), EndByte: node.EndByte(), StartLine: start.Row, StartCol: start.Column, EndLine: end.Row, EndCol: end.Column},
 					Source: node.Utf8Text(ast.Source()),
 				})
+			}
+			if owner := owners[c.ParentName]; copy_doc.Blocks[index].Parent == "" && owner.Kind == "type" {
+				copy_doc.Blocks[index].Parent = types[owner.Name]
 			}
 			if c.Cyclomatic.Value != nil {
 				complexities[copy_doc.Blocks[index].ID] = *c.Cyclomatic.Value
