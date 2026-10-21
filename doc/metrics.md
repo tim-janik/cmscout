@@ -184,7 +184,9 @@ Names are unique within a snapshot. They stay the same for the same root,
 logical path, source, and naming version, including when using stdin or a saved
 copy. Different checkout roots have different namespaces. Inserting an anonymous
 sibling or renaming a parent can change names; a name is not permanent identity
-across revisions. Unresolved C++ owners have `name_origin: "unresolved_owner"`.
+across revisions. An owner not defined in the file, such as the class of a C++
+out-of-class definition or the receiver type of a Go method declared in another
+file, becomes a `scope` record with `name_origin: "unresolved_owner"`.
 
 `snapshot_id` hashes the namespace, logical path, selected language, and source.
 `content_digest` hashes only the original source bytes. No timestamp is required.
