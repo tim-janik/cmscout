@@ -158,7 +158,7 @@ func Analyze(doc *ir.SemanticDocument, ast *parser.AST, opts Options) (*Report, 
 			continue
 		}
 		run := prefixRun(b, comments, src)
-		if len(run) > 0 {
+		if len(run) > 0 && prefixed[run[0]] == nil {
 			prefixRuns[b] = run
 			for _, c := range run {
 				prefixed[c] = b
