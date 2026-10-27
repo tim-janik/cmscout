@@ -1,3 +1,27 @@
+## Unreleased
+
+### Added:
+
+* Added `cmscout --metrics` to measure per-function cyclomatic complexity,
+  source sizes, and prefix and inline comment sizes, as text or JSON.
+* Added metrics comparisons for file pairs, staged changes, tracked working
+  files and revisions, with touched functions, metric deltas and the semantic diff.
+* Added `--scan` with `--include` and `--exclude` globs to measure files and
+  directories.
+* Added `cmscout --stats` for a line-based report of block sizes, comments,
+  container method counts and complexity, using the same counting engine.
+* Added `examples/lint-metrics.py` to reject complex or growing functions
+  before a commit.
+
+### Changed:
+
+* Printed the usage text for an invalid flag on stderr instead of stdout.
+
+### Fixed:
+
+* Recognized C++ destructor prototypes as methods instead of variables.
+* Escaped control characters in file names of the `diff --cmscout` header.
+
 ## CMSCOUT 0.2.0
 
 ### Added:
