@@ -1,2 +1,3 @@
 .version export-subst
 /.git* export-ignore
+/AGENTS.md export-ignore
