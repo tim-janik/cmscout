@@ -120,6 +120,11 @@ or from the clone:
 CGO_ENABLED=1 go install ./cmd/cmscout
 ```
 
+Contributors also need Python 3 and ShellCheck. Run `make check` for tests, lint,
+tooling and history checks; it also runs from the source archive, where Git
+history and workflow checks are skipped. Running `make distcheck` checks
+the committed source and binary archives.
+
 
 ### Git integration
 

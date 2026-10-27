@@ -21,12 +21,16 @@ jobs:
     - { uses: actions/checkout@v7, with: { fetch-depth: 0, fetch-tags: true } }
     - run: git fetch --force --tags     # Fix actions/checkout#290
     - { uses: actions/setup-go@v5, with: { go-version-file: go.mod } }
+    - name: Check
+      env:
+        CHECK_BASE: '${{ github.event.pull_request.base.sha || github.event.before }}'
+        CHECK_HEAD: '${{ github.event.pull_request.head.sha || github.sha }}'
+      run: |
+        if [[ $CHECK_BASE =~ ^0+$ ]]; then unset CHECK_BASE; fi
+        make -w check
     - run: make -w distcheck
     - uses: actions/upload-artifact@v7
       with: { name: cmscout-Artifacts, path: artifacts/ }
-    - run: shellcheck .github/workflows/*.sh
-    - run: .github/workflows/release-test.sh
-      if: github.ref_type != 'tag'        # skip release tooling tests, Release runs the real thing
 
   Release:
     if: github.ref_type == 'tag'        # constrained by on.push.tags
@@ -50,7 +54,6 @@ jobs:
     steps:
     - { uses: actions/checkout@v7, with: { fetch-depth: 0 } }
     - run: git fetch --force --tags     # Fix actions/checkout#290
-    - run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s .github/workflows -p test_ircbot.py -v # test_ircbot.py --preview
     - name: Ping-IRC
       continue-on-error: true
       if: ${{ !env.ACT }}  # IRCBOT_JOBS indicates 'success'
