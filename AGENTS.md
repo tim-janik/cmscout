@@ -37,5 +37,5 @@
 - Set CHECK_BASE and CHECK_HEAD to select a committed range. A commit that deletes a block of ten or more code lines with nothing added in its place needs an `Evidence:` paragraph.
 - The removal count excludes tests, fixtures and generated source. A line count cannot judge whether the evidence is sound.
 - `make distcheck` builds and tests committed HEAD through its source archive. Run working-tree checks before committing too.
-- IRC notifications come from release-kit's reusable workflow; keep the remaining release scripts in sync upstream.
+- IRC notifications and releases come from release-kit's reusable workflows; no copies are kept here.
 - Project-specific release behavior belongs in `Makefile` and workflows. Tests mock external services and run independently of user configuration.

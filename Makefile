@@ -65,11 +65,8 @@ ifneq ($(wildcard AGENTS.md),)
 endif
 .PHONY: check-agents-md
 
-check-tooling: ## Test check scripts and mocked release tooling
+check-tooling: ## Test check scripts
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s misc -p 'test_*.py' -v
-ifneq ($(wildcard .github/workflows),)
-	.github/workflows/release-test.sh
-endif
 .PHONY: check-tooling
 
 CHECK_HEAD ?= HEAD

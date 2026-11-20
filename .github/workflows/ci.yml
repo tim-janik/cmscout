@@ -35,16 +35,11 @@ jobs:
   Release:
     if: github.ref_type == 'tag'        # constrained by on.push.tags
     needs: [ Build-And-Test ]
-    runs-on: ubuntu-24.04
     permissions: { contents: write }    # allow github.token to create a release
-    env:
-      GH_TOKEN: '${{ github.token }}'
-      DOCKER_IMAGE: 'cimg/go:1.25.14@sha256:8d128f13dfe2b603924b2d9c3d30e8fae864a4e0f40cf1abd7a53bea7e270afc'
-      DOCKER_ENV: 'GOTOOLCHAIN=local GOFLAGS=-mod=readonly'
-    steps:
-    - { uses: actions/checkout@v7, with: { fetch-depth: 0, fetch-tags: true } }
-    - run: git fetch --force --tags     # Fix actions/checkout#290
-    - run: .github/workflows/gh-release.sh --docker --upload
+    uses: tim-janik/release-kit/.github/workflows/release.yml@trunk
+    with:
+      docker-image: 'cimg/go:1.25.14@sha256:8d128f13dfe2b603924b2d9c3d30e8fae864a4e0f40cf1abd7a53bea7e270afc'
+      docker-env: 'GOTOOLCHAIN=local GOFLAGS=-mod=readonly'
 
   Ping-IRC:
     # Announce tag and trunk pushes unless cancelled
