@@ -65,10 +65,9 @@ ifneq ($(wildcard AGENTS.md),)
 endif
 .PHONY: check-agents-md
 
-check-tooling: ## Test check scripts and mocked release and IRC tooling
+check-tooling: ## Test check scripts and mocked release tooling
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s misc -p 'test_*.py' -v
 ifneq ($(wildcard .github/workflows),)
-	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s .github/workflows -p test_ircbot.py -v
 	.github/workflows/release-test.sh
 endif
 .PHONY: check-tooling
